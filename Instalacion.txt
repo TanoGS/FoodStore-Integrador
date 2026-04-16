@@ -1,0 +1,16 @@
+npm create vite@latest food-store-frontend -- --template react-ts
+cd food-store-frontend
+
+# 1. Dependencias principales de UI, Estado y Fetching
+npm install react-router-dom @tanstack/react-query @tanstack/react-form zustand axios recharts
+
+# 2. Tailwind CSS y sus dependencias (como dev dependencies)
+npm install -D tailwindcss postcss autoprefixer
+
+
+
+Run back: uvicorn main:app --reload
+
+Encender motor: .\.venv\Scripts\Activate.ps1
+
+http://127.0.0.1:8000/docs
