@@ -12,9 +12,9 @@ from sqlmodel import SQLModel
 
 # 2. Importamos nuestra configuración y modelos
 from core.config import settings
-from app.modules.categorias.models import Categoria
+from app.modules.categoria.models import Categoria
 from app.modules.ingredientes.models import Ingrediente
-from app.modules.productos.models import Producto, ProductoCategoria, ProductoIngrediente
+from app.modules.productos.models import Producto
 
 # Modelos de Identidad y Acceso
 from app.modules.usuarios.models import Rol, Usuario
