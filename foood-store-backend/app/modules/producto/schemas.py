@@ -20,3 +20,13 @@ class ProductoResponse(ProductoBase):
 
     class Config:
         from_attributes = True
+
+class ProductoUpdate(BaseModel):
+    nombre: Optional[str] = Field(None, max_length=100)
+    descripcion: Optional[str] = None
+    precio_base: Optional[float] = Field(None, ge=0)
+    es_personalizable: Optional[bool] = None
+    imagen_url: Optional[str] = None
+    stock_disponible: Optional[int] = Field(None, ge=0)
+    activo: Optional[bool] = None
+    categoria_ids: Optional[List[int]] = None

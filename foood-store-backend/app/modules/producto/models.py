@@ -2,6 +2,22 @@ from typing import Optional
 from sqlmodel import SQLModel, Field
 from datetime import datetime
 
+# --- Modelo Principal ---
+class Producto(SQLModel, table=True):
+    __tablename__ = "producto"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nombre: str = Field(index=True, unique=True, max_length=100)
+    descripcion: Optional[str] = Field(default=None)
+    precio_base: float = Field(default=0.0)
+    es_personalizable: bool = Field(default=False)
+    imagen_url: Optional[str] = Field(default=None)
+    stock_disponible: int = Field(default=0)
+    activo: bool = Field(default=True)
+
+    # Soft Delete
+    eliminado_en: Optional[datetime] = Field(default=None)
+
 # --- Tablas Intermedias ---
 class ProductoCategoria(SQLModel, table=True):
     __tablename__ = "producto_categoria"
@@ -15,18 +31,5 @@ class ProductoIngrediente(SQLModel, table=True):
     es_removible: bool = Field(default=True)
     precio_adicional: float = Field(default=0.0)
 
-# --- Modelo Principal ---
-class Producto(SQLModel, table=True):
-    __tablename__ = "producto"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    nombre: str = Field(index=True, unique=True, max_length=100)
-    descripcion: Optional[str] = Field(default=None)
-    precio_base: float = Field(default=0.0)
-    es_personalizable: bool = Field(default=False)
-    imagen_url: Optional[str] = Field(default=None)
-    stock_disponible: int = Field(default=0)
-    activo: bool = Field(default=True)
-    
-    # Soft Delete
-    eliminado_en: Optional[datetime] = Field(default=None)
+
+ 

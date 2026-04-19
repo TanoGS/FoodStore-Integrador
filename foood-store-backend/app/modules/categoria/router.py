@@ -3,7 +3,7 @@ from typing import List
 from sqlmodel import Session
 
 from core.database import get_session
-from .schemas import CategoriaCreate, CategoriaResponse
+from .schemas import CategoriaCreate, CategoriaResponse, CategoriaUpdate
 from .unit_of_work import CategoriaUnitOfWork
 from .service import CategoriaService
 
@@ -33,3 +33,11 @@ def eliminar_categoria(
     service: CategoriaService = Depends(get_categoria_service)
 ):
     return service.eliminar_logicamente(id)
+
+@router.patch("/{id}", response_model=CategoriaResponse, status_code=status.HTTP_200_OK)
+def actualizar_categoria(
+    id: int,
+    categoria_in: CategoriaUpdate,
+    service: CategoriaService = Depends(get_categoria_service)
+):
+    return service.actualizar(id, categoria_in)

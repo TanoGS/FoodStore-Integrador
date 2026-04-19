@@ -1,4 +1,4 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, select, delete
 from typing import Optional, List
 from .models import Producto, ProductoCategoria
 
@@ -25,3 +25,7 @@ class ProductoRepository:
         for cat_id in categoria_ids:
             relacion = ProductoCategoria(producto_id=producto_id, categoria_id=cat_id)
             self.session.add(relacion)
+
+    def limpiar_categorias(self, producto_id: int):
+        statement = delete(ProductoCategoria).where(ProductoCategoria.producto_id == producto_id)
+        self.session.exec(statement)

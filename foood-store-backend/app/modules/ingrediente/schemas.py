@@ -9,6 +9,10 @@ class IngredienteBase(BaseModel):
 class IngredienteCreate(IngredienteBase):
     pass
 
+class IngredienteUpdate(BaseModel):
+    nombre: Optional[str] = Field(None, max_length=100)
+    es_alergeno: Optional[bool] = None
+
 class IngredienteResponse(IngredienteBase):
     id: int
     eliminado_en: Optional[datetime] = None

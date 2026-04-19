@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERD — Sistema de Pedidos v3.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #0d0f0e;
+  --bg2:       #111412;
+  --bg3:       #161a17;
+  --surface:   #1a1f1c;
+  --surface2:  #1f2520;
+  --border:    #252b27;
+  --border2:   #2e3631;
+  --text:      #cdd5c8;
+  --text2:     #8a9485;
+  --text3:     #50584f;
+  --green:     #4ade80;
+  --green-dim: #166534;
+  --green-bg:  rgba(74,222,128,.07);
+  --blue:      #60a5fa;
+  --blue-dim:  #1e3a5f;
+  --blue-bg:   rgba(96,165,250,.07);
+  --yellow:    #fbbf24;
+  --yellow-bg: rgba(251,191,36,.07);
+  --violet:    #a78bfa;
+  --violet-bg: rgba(167,139,250,.07);
+  --red:       #f87171;
+  --red-bg:    rgba(248,113,113,.07);
+  --cyan:      #22d3ee;
+  --mono:      'IBM Plex Mono', monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12.5px;line-height:1.5;-webkit-font-smoothing:antialiased;display:grid;grid-template-columns:220px 1fr;grid-template-rows:52px 1fr;min-height:100vh}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* TOPBAR */
+.topbar{grid-column:1/-1;background:var(--bg2);border-bottom:1px solid var(--border2);display:flex;align-items:center;padding:0 1.5rem;gap:1.5rem;position:sticky;top:0;z-index:100}
+.logo{font-size:.7rem;font-weight:600;letter-spacing:.06em;color:var(--text);white-space:nowrap;display:flex;align-items:center;gap:.5rem}
+.logo-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0}
+.topbar-sep{width:1px;height:20px;background:var(--border2)}
+.topbar-meta{font-size:.58rem;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.search-wrap{margin-left:auto;position:relative;display:flex;align-items:center}
+.search-icon{position:absolute;left:.65rem;color:var(--text3);font-size:.75rem;pointer-events:none}
+#searchInput{background:var(--surface);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:.65rem;padding:.35rem .7rem .35rem 2rem;width:240px;outline:none;transition:border-color .15s,box-shadow .15s}
+#searchInput::placeholder{color:var(--text3)}
+#searchInput:focus{border-color:var(--green-dim);box-shadow:0 0 0 2px rgba(74,222,128,.1)}
+.search-count{position:absolute;right:.6rem;font-size:.52rem;color:var(--text3)}
+
+/* SIDEBAR */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:1.5rem 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar-section{margin-bottom:1.5rem}
+.sidebar-label{font-size:.5rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);padding:0 1.2rem;margin-bottom:.5rem}
+.sidebar-link{display:flex;align-items:center;gap:.5rem;padding:.32rem 1.2rem;font-size:.62rem;color:var(--text2);text-decoration:none;cursor:pointer;transition:color .12s,background .12s;border-left:2px solid transparent;letter-spacing:.02em}
+.sidebar-link:hover{color:var(--text);background:var(--bg3)}
+.sidebar-link.active{color:var(--green);border-left-color:var(--green);background:var(--green-bg)}
+.sidebar-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;opacity:.5}
+.sidebar-link.active .sidebar-dot{opacity:1}
+.sidebar-stereo{margin-left:auto;font-size:.44rem;padding:.06rem .28rem;border-radius:2px;font-weight:600;letter-spacing:.04em;opacity:.7}
+
+/* MAIN */
+.main{padding:2rem 2.5rem 5rem;overflow-y:auto;display:flex;flex-direction:column;gap:3rem}
+.main::-webkit-scrollbar{width:4px}
+
+/* DOMAIN */
+.domain{scroll-margin-top:1.5rem}
+.domain-header{display:flex;align-items:center;gap:.8rem;margin-bottom:1.25rem;padding-bottom:.75rem;border-bottom:1px solid var(--border2)}
+.domain-num{font-size:.52rem;font-weight:600;letter-spacing:.14em;color:var(--text3);text-transform:uppercase}
+.domain-name{font-size:.85rem;font-weight:600;letter-spacing:.04em;color:var(--text)}
+.domain-pill{font-size:.5rem;font-weight:600;padding:.12rem .45rem;border-radius:2px;letter-spacing:.06em;text-transform:uppercase;margin-left:auto;color:var(--text3);background:var(--surface);border:1px solid var(--border2)}
+
+/* TABLE GRID */
+.tables-grid{display:flex;gap:.85rem;flex-wrap:wrap;align-items:flex-start}
+
+/* TABLE CARD */
+.tbl{background:var(--surface);border:1px solid var(--border2);border-radius:4px;min-width:230px;max-width:268px;flex:0 0 auto;overflow:hidden;transition:border-color .15s,box-shadow .15s}
+.tbl:hover{box-shadow:0 0 0 1px var(--border2),0 4px 24px rgba(0,0,0,.4)}
+.tbl.hl-table{border-color:var(--green-dim);box-shadow:0 0 0 1px var(--green-dim)}
+.tbl-head{padding:.5rem .8rem;background:var(--surface2);border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:.4rem}
+.tbl-name{font-size:.68rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text);flex:1}
+.tbl-stereo{font-size:.45rem;font-weight:600;padding:.1rem .3rem;border-radius:2px;letter-spacing:.05em;text-transform:uppercase}
+.st-table  {background:var(--blue-bg);  color:var(--blue);  border:1px solid var(--blue-dim)}
+.st-link   {background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(251,191,36,.25)}
+.st-catalog{background:var(--green-bg); color:var(--green); border:1px solid var(--green-dim)}
+.tbl-sec{padding:.25rem .8rem .1rem;font-size:.46rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);border-top:1px solid var(--border);margin-top:.1rem}
+.tbl-sec:first-of-type{border-top:none;margin-top:0}
+.frow{display:grid;grid-template-columns:74px 1fr auto;gap:.2rem;padding:.23rem .8rem;align-items:center;border-bottom:1px solid rgba(255,255,255,.025);transition:background .1s}
+.frow:last-child{border-bottom:none}
+.frow:hover{background:rgba(255,255,255,.025)}
+.frow.f-pk{background:rgba(251,191,36,.045)}
+.frow.f-pk:hover{background:rgba(251,191,36,.08)}
+.frow.hl-field{background:rgba(74,222,128,.08)!important}
+.f-type{font-size:.54rem;color:var(--text3);font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f-name{font-size:.62rem;font-weight:400;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f-name.nm-pk{color:var(--yellow);font-weight:500}
+.f-name.nm-fk{color:var(--blue)}
+.f-name.nm-snap{color:var(--violet)}
+.f-tags{display:flex;gap:.15rem;justify-content:flex-end}
+.tag{font-size:.43rem;font-weight:600;padding:.06rem .22rem;border-radius:2px;letter-spacing:.04em;white-space:nowrap}
+.t-pk  {background:var(--yellow-bg); color:var(--yellow);border:1px solid rgba(251,191,36,.25)}
+.t-fk  {background:var(--blue-bg);   color:var(--blue);  border:1px solid rgba(96,165,250,.2)}
+.t-uq  {background:var(--green-bg);  color:var(--green); border:1px solid var(--green-dim)}
+.t-nn  {background:var(--surface2);  color:var(--text3); border:1px solid var(--border2)}
+.t-snap{background:var(--violet-bg); color:var(--violet);border:1px solid rgba(167,139,250,.2)}
+.t-chk {background:var(--red-bg);    color:var(--red);   border:1px solid rgba(248,113,113,.2)}
+
+/* SECTION HEADER */
+.section-header{display:flex;align-items:center;gap:.8rem;margin-bottom:1.25rem;padding-bottom:.75rem;border-bottom:1px solid var(--border2)}
+.section-header h2{font-size:.85rem;font-weight:600;letter-spacing:.04em;color:var(--text)}
+.section-header .pill,.domain-pill{font-size:.5rem;font-weight:600;padding:.12rem .45rem;border-radius:2px;letter-spacing:.06em;text-transform:uppercase;margin-left:auto;color:var(--text3);background:var(--surface);border:1px solid var(--border2)}
+
+/* RELATIONS TABLE */
+.rel-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:4px;background:var(--surface)}
+.rel-wrap::-webkit-scrollbar{height:3px}
+table.rel-tbl{width:100%;border-collapse:collapse;font-size:.62rem;min-width:640px}
+.rel-tbl thead tr{background:var(--surface2);border-bottom:1px solid var(--border2)}
+.rel-tbl thead th{padding:.5rem .9rem;text-align:left;font-size:.5rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);white-space:nowrap}
+.rel-tbl tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+.rel-tbl tbody tr:last-child{border-bottom:none}
+.rel-tbl tbody tr:hover{background:var(--bg3)}
+.rel-tbl td{padding:.38rem .9rem;vertical-align:middle;white-space:nowrap}
+.td-from{color:var(--yellow);font-weight:500}
+.td-to{color:var(--blue);font-weight:500}
+.td-field code{background:var(--bg3);padding:.05rem .3rem;border-radius:2px;color:var(--cyan);font-size:.95em;border:1px solid var(--border2)}
+.card-badge{display:inline-block;padding:.1rem .35rem;border-radius:2px;font-size:.47rem;font-weight:600;letter-spacing:.04em;white-space:nowrap}
+.cb-1n{background:var(--blue-bg);  color:var(--blue);  border:1px solid rgba(96,165,250,.2)}
+.cb-nm{background:var(--violet-bg);color:var(--violet);border:1px solid rgba(167,139,250,.2)}
+.cb-sr{background:var(--surface2); color:var(--text3); border:1px solid var(--border2)}
+.fk-act{display:inline-block;padding:.08rem .3rem;border-radius:2px;font-size:.47rem;font-weight:600;letter-spacing:.04em}
+.fk-cascade {background:var(--red-bg);   color:var(--red);   border:1px solid rgba(248,113,113,.2)}
+.fk-restrict{background:var(--blue-bg);  color:var(--blue);  border:1px solid rgba(96,165,250,.2)}
+.fk-setnull {background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(251,191,36,.2)}
+
+/* PATTERNS */
+.patterns-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem}
+.pat-card{background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:.9rem 1rem;transition:border-color .15s}
+.pat-card:hover{box-shadow:0 0 0 1px var(--border2)}
+.pat-head{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem}
+.pat-num{font-size:.52rem;font-weight:600;color:var(--text3);letter-spacing:.06em;width:20px}
+.pat-title{font-size:.65rem;font-weight:600;color:var(--text);letter-spacing:.03em}
+.pat-body{font-size:.58rem;color:var(--text2);line-height:1.75}
+.pat-body code{background:var(--bg3);padding:.03rem .26rem;border-radius:2px;color:var(--cyan);font-size:.95em;border:1px solid var(--border2)}
+
+/* LEGEND */
+.legend-row{display:flex;gap:1rem;flex-wrap:wrap;padding:.75rem 1rem;background:var(--surface);border:1px solid var(--border2);border-radius:4px}
+.leg{display:flex;align-items:center;gap:.35rem;font-size:.56rem;color:var(--text2);white-space:nowrap}
+
+/* FOOTER */
+footer{grid-column:1/-1;border-top:1px solid var(--border);padding:.75rem 2.5rem;font-size:.55rem;color:var(--text3);background:var(--bg2);display:flex;gap:1.5rem;letter-spacing:.04em}
+footer span{color:var(--text2)}
+
+/* SEARCH HIDDEN */
+.tbl.hidden{display:none}
+.frow.hidden{display:none}
+
+/* ─── TRAZABILIDAD ─── */
+.st-badge{display:inline-block;padding:.1rem .38rem;border-radius:2px;font-size:.5rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.st-PENDIENTE {background:rgba(251,191,36,.1); color:var(--yellow);border:1px solid rgba(251,191,36,.25)}
+.st-CONFIRMADO{background:rgba(96,165,250,.1); color:var(--blue);  border:1px solid rgba(96,165,250,.2)}
+.st-EN_PREP   {background:rgba(34,211,238,.1); color:var(--cyan);  border:1px solid rgba(34,211,238,.2)}
+.st-EN_CAMINO {background:rgba(167,139,250,.1);color:var(--violet);border:1px solid rgba(167,139,250,.2)}
+.st-ENTREGADO {background:rgba(74,222,128,.1); color:var(--green); border:1px solid rgba(74,222,128,.2)}
+.st-CANCELADO {background:rgba(248,113,113,.1);color:var(--red);   border:1px solid rgba(248,113,113,.2)}
+
+/* FSM */
+.fsm-wrap{background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:2rem 2rem 1.5rem;overflow-x:auto}
+.fsm-main-track{display:flex;align-items:flex-start;gap:0;min-width:max-content}
+.fsm-node{display:flex;flex-direction:column;align-items:center;gap:.45rem}
+.fsm-circle{width:58px;height:58px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;font-size:.5rem;font-weight:600;letter-spacing:.03em;text-align:center;line-height:1.35;transition:transform .15s,box-shadow .18s;cursor:default}
+.fsm-circle:hover{transform:scale(1.1);box-shadow:0 0 18px currentColor}
+.fsm-circle.terminal{border-width:3px}
+.fsm-node-label{font-size:.5rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.fsm-node-meta{font-size:.44rem;color:var(--text3);white-space:nowrap}
+.fsm-connector{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.12rem;padding:0 .4rem;margin-top:1.1rem}
+.fsm-line{width:44px;height:1px;background:var(--border2);position:relative}
+.fsm-line::after{content:'▶';position:absolute;right:-5px;top:50%;transform:translateY(-50%);font-size:.42rem;color:var(--text3)}
+.fsm-event{font-size:.44rem;color:var(--text3);white-space:nowrap;letter-spacing:.03em}
+.fsm-cancel{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:1.2rem;padding-top:.85rem;border-top:1px dashed var(--border2)}
+.fsm-cancel-label{font-size:.5rem;color:var(--text3);letter-spacing:.04em;margin-right:.2rem}
+.fsm-cancel-sep{font-size:.52rem;color:var(--red);opacity:.5}
+
+/* PlantUML files notice */
+.puml-notice{display:flex;gap:.6rem;background:var(--surface);border:1px solid var(--border2);border-left:3px solid var(--cyan);border-radius:4px;padding:.75rem 1rem;margin-bottom:1.25rem;align-items:flex-start}
+.puml-notice-icon{font-size:.9rem;flex-shrink:0;margin-top:.05rem}
+.puml-notice-body{font-size:.58rem;color:var(--text2);line-height:1.7}
+.puml-notice-body code{background:var(--bg3);padding:.03rem .28rem;border-radius:2px;color:var(--cyan);font-size:.9em;border:1px solid var(--border2)}
+.puml-notice-body strong{color:var(--text);font-weight:500}
+
+/* Schema cards */
+.schema-cols{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem}
+@media(max-width:1100px){.schema-cols{grid-template-columns:1fr}}
+.schema-card{background:var(--surface);border:1px solid var(--border2);border-radius:4px;overflow:hidden}
+.schema-head{padding:.5rem .85rem;background:var(--surface2);border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:.5rem}
+.schema-title{font-size:.65rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text)}
+.schema-role{font-size:.5rem;color:var(--text3);margin-left:auto}
+.schema-frow{display:grid;grid-template-columns:80px 1fr auto;gap:.2rem;padding:.24rem .85rem;border-bottom:1px solid rgba(255,255,255,.025);align-items:center;font-size:.6rem;transition:background .1s}
+.schema-frow:last-child{border-bottom:none}
+.schema-frow:hover{background:rgba(255,255,255,.022)}
+.schema-frow.highlighted{background:rgba(34,211,238,.05)}
+.schema-frow.pk-row{background:rgba(251,191,36,.04)}
+.schema-frow.pk-row:hover{background:rgba(251,191,36,.08)}
+.sf-type{font-size:.53rem;color:var(--text3);font-weight:300}
+.sf-name{color:var(--text)}
+.sf-name.is-pk {color:var(--yellow);font-weight:500}
+.sf-name.is-fk {color:var(--blue)}
+.sf-name.is-key{color:var(--cyan);font-weight:500}
+.sf-tags{display:flex;gap:.15rem;justify-content:flex-end}
+.schema-sep{padding:.22rem .85rem .08rem;font-size:.44rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);border-top:1px solid var(--border)}
+.schema-note{padding:.6rem .85rem;border-top:1px solid var(--border);font-size:.53rem;color:var(--text3);line-height:1.7}
+
+/* FK bridge */
+.fk-bridge{margin-top:1rem;background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.fk-ent{background:var(--surface2);border:1px solid var(--border2);border-radius:3px;padding:.45rem .85rem;font-size:.62rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:.4rem;white-space:nowrap}
+.fk-ent-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.fk-pipe{flex:1;min-width:100px;display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.fk-pipe-line{width:100%;height:1px;background:var(--border2);position:relative}
+.fk-pipe-line::before{content:'1';position:absolute;left:-10px;top:-8px;font-size:.48rem;color:var(--yellow);font-weight:600}
+.fk-pipe-line::after{content:'N ▶';position:absolute;right:-14px;top:-8px;font-size:.48rem;color:var(--blue);font-weight:600;white-space:nowrap}
+.fk-pipe-meta{display:flex;flex-direction:column;align-items:center;gap:.18rem}
+.fk-meta-row{font-size:.48rem;color:var(--text3);letter-spacing:.03em}
+.fk-meta-row code{color:var(--cyan);font-size:.9em;background:var(--bg3);padding:.02rem .25rem;border-radius:2px;border:1px solid var(--border2)}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="logo"><div class="logo-dot"></div>ERD — Sistema de Pedidos</div>
+  <div class="topbar-sep"></div>
+  <div class="topbar-meta">v3.0 · 12 entidades · 3 dominios</div>
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input type="text" id="searchInput" placeholder="Buscar entidad o campo…" autocomplete="off">
+    <span class="search-count" id="searchCount"></span>
+  </div>
+</nav>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Dominios</div>
+    <a class="sidebar-link active" href="#domain-iam" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--violet)"></div>Identidad & Acceso</a>
+    <a class="sidebar-link" href="#domain-catalog" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--green)"></div>Catálogo</a>
+    <a class="sidebar-link" href="#domain-sales" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--yellow)"></div>Ventas</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Entidades</div>
+    <a class="sidebar-link" href="#tbl-usuario" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>Usuario<span class="sidebar-stereo st-table">Table</span></a>
+    <a class="sidebar-link" href="#tbl-rol" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--green)"></div>Rol<span class="sidebar-stereo st-catalog">Catalog</span></a>
+    <a class="sidebar-link" href="#tbl-usuariorol" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--yellow)"></div>UsuarioRol<span class="sidebar-stereo st-link">Link</span></a>
+    <a class="sidebar-link" href="#tbl-direccion" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>DireccionEntrega<span class="sidebar-stereo st-table">Table</span></a>
+    <a class="sidebar-link" href="#tbl-categoria" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>Categoria<span class="sidebar-stereo st-table">Table</span></a>
+    <a class="sidebar-link" href="#tbl-producto" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>Producto<span class="sidebar-stereo st-table">Table</span></a>
+    <a class="sidebar-link" href="#tbl-prodcat" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--yellow)"></div>ProductoCategoria<span class="sidebar-stereo st-link">Link</span></a>
+    <a class="sidebar-link" href="#tbl-ingrediente" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>Ingrediente<span class="sidebar-stereo st-table">Table</span></a>
+    <a class="sidebar-link" href="#tbl-prodingr" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--yellow)"></div>ProductoIngrediente<span class="sidebar-stereo st-link">Link</span></a>
+    <a class="sidebar-link" href="#tbl-formapago" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--green)"></div>FormaPago<span class="sidebar-stereo st-catalog">Catalog</span></a>
+    <a class="sidebar-link" href="#tbl-estadopedido" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--green)"></div>EstadoPedido<span class="sidebar-stereo st-catalog">Catalog</span></a>
+    <a class="sidebar-link" href="#tbl-pedido" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>Pedido<span class="sidebar-stereo st-table">Table</span></a>
+    <a class="sidebar-link" href="#tbl-detalle" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>DetallePedido<span class="sidebar-stereo st-table">Table</span></a>
+    <a class="sidebar-link" href="#tbl-historial" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--blue)"></div>HistorialEstado<span class="sidebar-stereo st-table">Table</span></a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Referencias</div>
+    <a class="sidebar-link" href="#rel-section" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--text3)"></div>Relaciones FK</a>
+    <a class="sidebar-link" href="#pat-section" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--text3)"></div>Patrones</a>
+    <a class="sidebar-link" href="#trace-section" onclick="setActive(this)"><div class="sidebar-dot" style="background:var(--cyan)"></div>Trazabilidad</a>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main" id="mainContent">
+
+  <!-- LEGEND -->
+  <div class="legend-row">
+    <div class="leg"><span class="tag t-pk">PK</span>Clave primaria</div>
+    <div class="leg"><span class="tag t-fk">FK</span>Clave foránea</div>
+    <div class="leg"><span class="tag t-uq">UQ</span>Único</div>
+    <div class="leg"><span class="tag t-nn">NN</span>Not null</div>
+    <div class="leg"><span class="tag t-snap">snap</span>Snapshot histórico</div>
+    <div class="leg"><span class="tag t-chk">chk</span>CHECK constraint</div>
+    <div class="leg" style="margin-left:auto;gap:.6rem">
+      <span class="tbl-stereo st-table">Table</span>entidad&nbsp;
+      <span class="tbl-stereo st-link">Link</span>pivot N:M&nbsp;
+      <span class="tbl-stereo st-catalog">Catalog</span>catálogo
+    </div>
+  </div>
+
+  <!-- ══ DOMINIO 1 ══ -->
+  <section class="domain" id="domain-iam">
+    <div class="domain-header"><span class="domain-num">01</span><span class="domain-name">Identidad &amp; Acceso</span><span class="domain-pill">4 entidades</span></div>
+    <div class="tables-grid" id="grid-iam">
+
+      <div class="tbl" id="tbl-usuario" data-name="usuario">
+        <div class="tbl-head"><span class="tbl-name">Usuario</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">Datos personales</div>
+        <div class="frow"><span class="f-type">VARCHAR(80)</span><span class="f-name">nombre</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(80)</span><span class="f-name">apellido</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(254)</span><span class="f-name">email</span><span class="f-tags"><span class="tag t-uq">UQ</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(20)</span><span class="f-name">celular</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">CHAR(60)</span><span class="f-name">password_hash</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">updated_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">deleted_at</span><span class="f-tags"></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-rol" data-name="rol">
+        <div class="tbl-head"><span class="tbl-name">Rol</span><span class="tbl-stereo st-catalog">Catalog</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">VARCHAR(50)</span><span class="f-name">nombre</span><span class="f-tags"><span class="tag t-uq">UQ</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TEXT</span><span class="f-name">descripcion</span><span class="f-tags"></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-usuariorol" data-name="usuariorol">
+        <div class="tbl-head"><span class="tbl-name">UsuarioRol</span><span class="tbl-stereo st-link">Link</span></div>
+        <div class="tbl-sec">PK compuesta</div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">usuario_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">rol_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">BIGINT</span><span class="f-name nm-fk">asignado_por_id</span><span class="f-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">expires_at</span><span class="f-tags"></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-direccion" data-name="direccionentrega">
+        <div class="tbl-head"><span class="tbl-name">DireccionEntrega</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">FK</div>
+        <div class="frow"><span class="f-type">BIGINT</span><span class="f-name nm-fk">usuario_id</span><span class="f-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">VARCHAR(80)</span><span class="f-name">etiqueta</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">TEXT</span><span class="f-name">linea1</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TEXT</span><span class="f-name">linea2</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(100)</span><span class="f-name">ciudad</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(9,6)</span><span class="f-name">latitud</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(9,6)</span><span class="f-name">longitud</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">es_principal</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">updated_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">deleted_at</span><span class="f-tags"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ DOMINIO 2 ══ -->
+  <section class="domain" id="domain-catalog">
+    <div class="domain-header"><span class="domain-num">02</span><span class="domain-name">Catálogo de Productos</span><span class="domain-pill">5 entidades</span></div>
+    <div class="tables-grid" id="grid-catalog">
+
+      <div class="tbl" id="tbl-categoria" data-name="categoria">
+        <div class="tbl-head"><span class="tbl-name">Categoria</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">FK</div>
+        <div class="frow"><span class="f-type">BIGINT</span><span class="f-name nm-fk">parent_id</span><span class="f-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">VARCHAR(100)</span><span class="f-name">nombre</span><span class="f-tags"><span class="tag t-uq">UQ</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TEXT</span><span class="f-name">descripcion</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">INT</span><span class="f-name">orden_display</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">updated_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">deleted_at</span><span class="f-tags"></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-producto" data-name="producto">
+        <div class="tbl-head"><span class="tbl-name">Producto</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">VARCHAR(150)</span><span class="f-name">nombre</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TEXT</span><span class="f-name">descripcion</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(10,2)</span><span class="f-name">precio_base</span><span class="f-tags"><span class="tag t-nn">NN</span><span class="tag t-chk">≥0</span></span></div>
+        <div class="frow"><span class="f-type">TEXT[]</span><span class="f-name">imagenes_url</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">INT</span><span class="f-name">tiempo_prep_min</span><span class="f-tags"></span></div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">disponible</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">updated_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">deleted_at</span><span class="f-tags"></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-prodcat" data-name="productocategoria">
+        <div class="tbl-head"><span class="tbl-name">ProductoCategoria</span><span class="tbl-stereo st-link">Link</span></div>
+        <div class="tbl-sec">PK compuesta</div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">producto_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">categoria_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">es_principal</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-ingrediente" data-name="ingrediente">
+        <div class="tbl-head"><span class="tbl-name">Ingrediente</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">VARCHAR(100)</span><span class="f-name">nombre</span><span class="f-tags"><span class="tag t-uq">UQ</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">es_alergeno</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-prodingr" data-name="productoingrediente">
+        <div class="tbl-head"><span class="tbl-name">ProductoIngrediente</span><span class="tbl-stereo st-link">Link</span></div>
+        <div class="tbl-sec">PK compuesta</div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">producto_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">ingrediente_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">es_removible</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">es_opcional</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ DOMINIO 3 ══ -->
+  <section class="domain" id="domain-sales">
+    <div class="domain-header"><span class="domain-num">03</span><span class="domain-name">Ventas &amp; Transacciones</span><span class="domain-pill">5 entidades</span></div>
+    <div class="tables-grid" id="grid-sales">
+
+      <div class="tbl" id="tbl-formapago" data-name="formapago">
+        <div class="tbl-head"><span class="tbl-name">FormaPago</span><span class="tbl-stereo st-catalog">Catalog</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">VARCHAR(30)</span><span class="f-name nm-pk">codigo</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">VARCHAR(80)</span><span class="f-name">descripcion</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">activo</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-estadopedido" data-name="estadopedido">
+        <div class="tbl-head"><span class="tbl-name">EstadoPedido</span><span class="tbl-stereo st-catalog">Catalog</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">VARCHAR(20)</span><span class="f-name nm-pk">codigo</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">VARCHAR(80)</span><span class="f-name">descripcion</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">INT</span><span class="f-name">orden</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">BOOLEAN</span><span class="f-name">es_terminal</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-pedido" data-name="pedido">
+        <div class="tbl-head"><span class="tbl-name">Pedido</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">FK</div>
+        <div class="frow"><span class="f-type">BIGINT</span><span class="f-name nm-fk">usuario_id</span><span class="f-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">BIGINT</span><span class="f-name nm-fk">direccion_id</span><span class="f-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(20)</span><span class="f-name nm-fk">estado_codigo</span><span class="f-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(30)</span><span class="f-name nm-fk">forma_pago_codigo</span><span class="f-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="tbl-sec">Snapshot</div>
+        <div class="frow"><span class="f-type">DECIMAL(10,2)</span><span class="f-name nm-snap">subtotal</span><span class="f-tags"><span class="tag t-snap">snap</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(10,2)</span><span class="f-name nm-snap">descuento</span><span class="f-tags"><span class="tag t-snap">snap</span></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(10,2)</span><span class="f-name nm-snap">costo_envio</span><span class="f-tags"><span class="tag t-snap">snap</span></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(10,2)</span><span class="f-name nm-snap">total</span><span class="f-tags"><span class="tag t-snap">snap</span><span class="tag t-chk">≥0</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">TEXT</span><span class="f-name">notas</span><span class="f-tags"></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">updated_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">deleted_at</span><span class="f-tags"></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-detalle" data-name="detallepedido">
+        <div class="tbl-head"><span class="tbl-name">DetallePedido</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK compuesta</div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">pedido_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="frow f-pk"><span class="f-type">BIGINT</span><span class="f-name nm-pk nm-fk">producto_id</span><span class="f-tags"><span class="tag t-pk">PK</span><span class="tag t-fk">FK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">SMALLINT</span><span class="f-name">cantidad</span><span class="f-tags"><span class="tag t-nn">NN</span><span class="tag t-chk">≥1</span></span></div>
+        <div class="tbl-sec">Snapshot</div>
+        <div class="frow"><span class="f-type">VARCHAR(150)</span><span class="f-name nm-snap">nombre_producto_snap</span><span class="f-tags"><span class="tag t-snap">snap</span></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(10,2)</span><span class="f-name nm-snap">precio_unitario_snap</span><span class="f-tags"><span class="tag t-snap">snap</span><span class="tag t-chk">≥0</span></span></div>
+        <div class="frow"><span class="f-type">DECIMAL(10,2)</span><span class="f-name nm-snap">subtotal_snap</span><span class="f-tags"><span class="tag t-snap">snap</span></span></div>
+        <div class="frow"><span class="f-type">JSONB</span><span class="f-name">personalizacion</span><span class="f-tags"></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+
+      <div class="tbl" id="tbl-historial" data-name="historialestadopedido">
+        <div class="tbl-head"><span class="tbl-name">HistorialEstado</span><span class="tbl-stereo st-table">Table</span></div>
+        <div class="tbl-sec">PK</div>
+        <div class="frow f-pk"><span class="f-type">BIGSERIAL</span><span class="f-name nm-pk">id</span><span class="f-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="tbl-sec">FK de trazabilidad</div>
+        <div class="frow"><span class="f-type">BIGINT</span><span class="f-name nm-fk">pedido_id</span><span class="f-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(20)</span><span class="f-name nm-fk">estado_desde</span><span class="f-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="frow"><span class="f-type">VARCHAR(20)</span><span class="f-name nm-fk">estado_hacia</span><span class="f-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="frow"><span class="f-type">BIGINT</span><span class="f-name nm-fk">usuario_id</span><span class="f-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="tbl-sec">Atributos</div>
+        <div class="frow"><span class="f-type">TEXT</span><span class="f-name">motivo</span><span class="f-tags"></span></div>
+        <div class="tbl-sec">Audit</div>
+        <div class="frow"><span class="f-type">TIMESTAMPTZ</span><span class="f-name">created_at</span><span class="f-tags"><span class="tag t-nn">NN</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ RELACIONES FK ══ -->
+  <section class="rel-section" id="rel-section" style="scroll-margin-top:1.5rem">
+    <div class="section-header"><h2>Relaciones &amp; Foreign Keys</h2><span class="pill">19 constraints</span></div>
+    <div class="rel-wrap">
+      <table class="rel-tbl">
+        <thead><tr><th>#</th><th>Desde</th><th>Hasta</th><th>Campo FK</th><th>Cardinalidad</th><th>ON DELETE</th><th>Dominio</th></tr></thead>
+        <tbody>
+          <tr><td style="color:var(--text3);font-size:.5rem">01</td><td class="td-from">Usuario</td><td class="td-to">DireccionEntrega</td><td class="td-field"><code>usuario_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-cascade">CASCADE</span></td><td style="color:var(--text3);font-size:.58rem">Identidad</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">02</td><td class="td-from">Usuario</td><td class="td-to">UsuarioRol</td><td class="td-field"><code>usuario_id</code></td><td><span class="card-badge cb-nm">N : M</span></td><td><span class="fk-act fk-cascade">CASCADE</span></td><td style="color:var(--text3);font-size:.58rem">Identidad</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">03</td><td class="td-from">Rol</td><td class="td-to">UsuarioRol</td><td class="td-field"><code>rol_id</code></td><td><span class="card-badge cb-nm">N : M</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Identidad</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">04</td><td class="td-from">Usuario</td><td class="td-to">UsuarioRol</td><td class="td-field"><code>asignado_por_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-setnull">SET NULL</span></td><td style="color:var(--text3);font-size:.58rem">Identidad</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">05</td><td class="td-from">Categoria</td><td class="td-to">Categoria</td><td class="td-field"><code>parent_id</code></td><td><span class="card-badge cb-sr">self-ref</span></td><td><span class="fk-act fk-setnull">SET NULL</span></td><td style="color:var(--text3);font-size:.58rem">Catálogo</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">06</td><td class="td-from">Producto</td><td class="td-to">ProductoCategoria</td><td class="td-field"><code>producto_id</code></td><td><span class="card-badge cb-nm">N : M</span></td><td><span class="fk-act fk-cascade">CASCADE</span></td><td style="color:var(--text3);font-size:.58rem">Catálogo</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">07</td><td class="td-from">Categoria</td><td class="td-to">ProductoCategoria</td><td class="td-field"><code>categoria_id</code></td><td><span class="card-badge cb-nm">N : M</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Catálogo</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">08</td><td class="td-from">Producto</td><td class="td-to">ProductoIngrediente</td><td class="td-field"><code>producto_id</code></td><td><span class="card-badge cb-nm">N : M</span></td><td><span class="fk-act fk-cascade">CASCADE</span></td><td style="color:var(--text3);font-size:.58rem">Catálogo</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">09</td><td class="td-from">Ingrediente</td><td class="td-to">ProductoIngrediente</td><td class="td-field"><code>ingrediente_id</code></td><td><span class="card-badge cb-nm">N : M</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Catálogo</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">10</td><td class="td-from">Usuario</td><td class="td-to">Pedido</td><td class="td-field"><code>usuario_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">11</td><td class="td-from">DireccionEntrega</td><td class="td-to">Pedido</td><td class="td-field"><code>direccion_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-setnull">SET NULL</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">12</td><td class="td-from">EstadoPedido</td><td class="td-to">Pedido</td><td class="td-field"><code>estado_codigo</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">13</td><td class="td-from">FormaPago</td><td class="td-to">Pedido</td><td class="td-field"><code>forma_pago_codigo</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">14</td><td class="td-from">Pedido</td><td class="td-to">DetallePedido</td><td class="td-field"><code>pedido_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-cascade">CASCADE</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">15</td><td class="td-from">Producto</td><td class="td-to">DetallePedido</td><td class="td-field"><code>producto_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">16</td><td class="td-from">Pedido</td><td class="td-to">HistorialEstado</td><td class="td-field"><code>pedido_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-cascade">CASCADE</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">17</td><td class="td-from">EstadoPedido</td><td class="td-to">HistorialEstado</td><td class="td-field"><code>estado_desde</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-setnull">SET NULL</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">18</td><td class="td-from">EstadoPedido</td><td class="td-to">HistorialEstado</td><td class="td-field"><code>estado_hacia</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-restrict">RESTRICT</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+          <tr><td style="color:var(--text3);font-size:.5rem">19</td><td class="td-from">Usuario</td><td class="td-to">HistorialEstado</td><td class="td-field"><code>usuario_id</code></td><td><span class="card-badge cb-1n">1 : N</span></td><td><span class="fk-act fk-setnull">SET NULL</span></td><td style="color:var(--text3);font-size:.58rem">Ventas</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ PATRONES ══ -->
+  <section id="pat-section" style="scroll-margin-top:1.5rem">
+    <div class="section-header"><h2>Patrones de diseño</h2><span class="pill">6 patrones</span></div>
+    <div class="patterns-grid">
+      <div class="pat-card"><div class="pat-head"><span class="pat-num">P01</span><span class="pat-title">Snapshot Pattern</span></div><div class="pat-body"><code>DetallePedido</code> almacena <code>nombre_producto_snap</code>, <code>precio_unitario_snap</code> y <code>subtotal_snap</code>. <code>Pedido</code> almacena <code>subtotal</code>, <code>descuento</code> y <code>total</code>. Valores fijos al momento de la compra, independientes de cambios futuros en el catálogo.</div></div>
+      <div class="pat-card"><div class="pat-head"><span class="pat-num">P02</span><span class="pat-title">Soft Delete</span></div><div class="pat-body"><code>deleted_at TIMESTAMPTZ NULL</code> en todas las entidades mutables. Registros activos: <code>WHERE deleted_at IS NULL</code>. Compatible con índices parciales en PostgreSQL, permite restauración y conserva integridad referencial.</div></div>
+      <div class="pat-card"><div class="pat-head"><span class="pat-num">P03</span><span class="pat-title">Audit Trail — Append-only</span></div><div class="pat-body"><code>HistorialEstadoPedido</code> es append-only: solo INSERT, nunca UPDATE ni DELETE. Incluye <code>estado_desde</code> + <code>estado_hacia</code> para reconstruir el timeline. <code>usuario_id</code> registra quién accionó cada transición.</div></div>
+      <div class="pat-card"><div class="pat-head"><span class="pat-num">P04</span><span class="pat-title">Catalog Table</span></div><div class="pat-body"><code>FormaPago</code>, <code>EstadoPedido</code> y <code>Rol</code> son catálogos sin migraciones. Más flexibles que <code>ENUM</code>: soportan atributos extra (<code>activo</code>, <code>orden</code>, <code>es_terminal</code>) y se extienden en runtime.</div></div>
+      <div class="pat-card"><div class="pat-head"><span class="pat-num">P05</span><span class="pat-title">Self-Referencing FK</span></div><div class="pat-body"><code>Categoria.parent_id → Categoria.id</code> habilita jerarquía de profundidad arbitraria. <code>ON DELETE SET NULL</code> evita que eliminar un padre rompa sus hijos. Navegar con CTEs recursivas (<code>WITH RECURSIVE</code>).</div></div>
+      <div class="pat-card"><div class="pat-head"><span class="pat-num">P06</span><span class="pat-title">Composite PK en Pivot Tables</span></div><div class="pat-body"><code>ProductoCategoria</code>, <code>ProductoIngrediente</code> y <code>UsuarioRol</code> usan PK compuesta en lugar de surrogate <code>id</code>. Garantiza unicidad a nivel de esquema y simplifica queries.</div></div>
+    </div>
+  </section>
+
+  <!-- ══ TRAZABILIDAD ══ -->
+  <section id="trace-section" style="scroll-margin-top:1.5rem">
+    <div class="section-header"><h2>Trazabilidad de Pedidos</h2><span class="pill">Máquina de estados · Pedido · HistorialEstado</span></div>
+
+    <!-- Nota PlantUML -->
+    <div class="puml-notice">
+      <div class="puml-notice-icon">📄</div>
+      <div class="puml-notice-body">
+        Diagramas PlantUML disponibles como archivos independientes —
+        <strong>ERD:</strong> <code>sistema_pedidos_erd.puml</code> &nbsp;·&nbsp;
+        <strong>Máquina de estados:</strong> <code>sistema_pedidos_estados.puml</code><br>
+        Nota: los dos diagramas son tipos distintos (<code>class</code> y <code>state</code>) y deben renderizarse en archivos separados para evitar el error <em>"Assumed diagram type: class"</em>.
+      </div>
+    </div>
+
+    <!-- FSM -->
+    <div style="margin-bottom:1.5rem">
+      <div style="font-size:.5rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:.7rem">Flujo de estados — <code style="color:var(--cyan);font-size:.9em;text-transform:none">EstadoPedido.codigo · sistema_pedidos_estados.puml</code></div>
+      <div class="fsm-wrap">
+        <div class="fsm-main-track">
+          <div class="fsm-node">
+            <div class="fsm-circle" style="border-color:var(--yellow);color:var(--yellow);background:rgba(251,191,36,.07)">PEND<br>IENTE</div>
+            <div class="fsm-node-label" style="color:var(--yellow)">PENDIENTE</div>
+            <div class="fsm-node-meta">orden: 1</div>
+          </div>
+          <div class="fsm-connector"><div class="fsm-line"></div><div class="fsm-event">confirmar()</div></div>
+          <div class="fsm-node">
+            <div class="fsm-circle" style="border-color:var(--blue);color:var(--blue);background:rgba(96,165,250,.07)">CONF<br>IRM.</div>
+            <div class="fsm-node-label" style="color:var(--blue)">CONFIRMADO</div>
+            <div class="fsm-node-meta">orden: 2</div>
+          </div>
+          <div class="fsm-connector"><div class="fsm-line"></div><div class="fsm-event">iniciarPrep()</div></div>
+          <div class="fsm-node">
+            <div class="fsm-circle" style="border-color:var(--cyan);color:var(--cyan);background:rgba(34,211,238,.07)">EN<br>PREP</div>
+            <div class="fsm-node-label" style="color:var(--cyan)">EN_PREP</div>
+            <div class="fsm-node-meta">orden: 3</div>
+          </div>
+          <div class="fsm-connector"><div class="fsm-line"></div><div class="fsm-event">despachar()</div></div>
+          <div class="fsm-node">
+            <div class="fsm-circle" style="border-color:var(--violet);color:var(--violet);background:rgba(167,139,250,.07)">EN<br>CAMINO</div>
+            <div class="fsm-node-label" style="color:var(--violet)">EN_CAMINO</div>
+            <div class="fsm-node-meta">orden: 4</div>
+          </div>
+          <div class="fsm-connector"><div class="fsm-line"></div><div class="fsm-event">confirmarEntrega()</div></div>
+          <div class="fsm-node">
+            <div class="fsm-circle terminal" style="border-color:var(--green);color:var(--green);background:rgba(74,222,128,.07)">ENTR<br>EGADO</div>
+            <div class="fsm-node-label" style="color:var(--green)">ENTREGADO</div>
+            <div class="fsm-node-meta">terminal ✓ · orden: 5</div>
+          </div>
+        </div>
+        <div class="fsm-cancel">
+          <span class="fsm-cancel-label">Cancelación posible desde:</span>
+          <span class="st-badge st-PENDIENTE">PENDIENTE</span><span class="fsm-cancel-sep">·</span>
+          <span class="st-badge st-CONFIRMADO">CONFIRMADO</span><span class="fsm-cancel-sep">·</span>
+          <span class="st-badge st-EN_PREP">EN_PREP</span>
+          <span style="font-size:.5rem;color:var(--text3);margin:0 .2rem">⟶</span>
+          <span class="st-badge st-CANCELADO">CANCELADO</span>
+          <span style="font-size:.46rem;color:var(--red);background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.2);padding:.08rem .3rem;border-radius:2px;margin-left:.2rem">terminal ✓ · orden: 6</span>
+          <span style="margin-left:auto;font-size:.5rem;color:var(--text3)"><code style="color:var(--cyan);font-size:.9em">es_terminal = true</code> bloquea transiciones salientes</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Schema cards -->
+    <div style="font-size:.5rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:.7rem">Entidades protagonistas</div>
+    <div class="schema-cols">
+      <div class="schema-card">
+        <div class="schema-head"><span class="tbl-stereo st-table">Table</span><span class="schema-title">Pedido</span><span class="schema-role">estado actual en <code style="color:var(--cyan);font-size:.88em">estado_codigo</code></span></div>
+        <div class="schema-sep">PK</div>
+        <div class="schema-frow pk-row"><span class="sf-type">BIGSERIAL</span><span class="sf-name is-pk">id</span><span class="sf-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="schema-sep">FK de trazabilidad</div>
+        <div class="schema-frow highlighted"><span class="sf-type">VARCHAR(20)</span><span class="sf-name is-key">estado_codigo</span><span class="sf-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-frow"><span class="sf-type">BIGINT</span><span class="sf-name is-fk">usuario_id</span><span class="sf-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-frow"><span class="sf-type">BIGINT</span><span class="sf-name is-fk">direccion_id</span><span class="sf-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="schema-frow"><span class="sf-type">VARCHAR(30)</span><span class="sf-name is-fk">forma_pago_codigo</span><span class="sf-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-sep">Snapshot monetario</div>
+        <div class="schema-frow"><span class="sf-type">DECIMAL(10,2)</span><span class="sf-name" style="color:var(--violet)">subtotal</span><span class="sf-tags"><span class="tag t-snap">snap</span></span></div>
+        <div class="schema-frow"><span class="sf-type">DECIMAL(10,2)</span><span class="sf-name" style="color:var(--violet)">descuento</span><span class="sf-tags"><span class="tag t-snap">snap</span></span></div>
+        <div class="schema-frow"><span class="sf-type">DECIMAL(10,2)</span><span class="sf-name" style="color:var(--violet)">costo_envio</span><span class="sf-tags"><span class="tag t-snap">snap</span></span></div>
+        <div class="schema-frow"><span class="sf-type">DECIMAL(10,2)</span><span class="sf-name" style="color:var(--violet)">total</span><span class="sf-tags"><span class="tag t-snap">snap</span><span class="tag t-chk">≥0</span></span></div>
+        <div class="schema-sep">Audit</div>
+        <div class="schema-frow"><span class="sf-type">TIMESTAMPTZ</span><span class="sf-name">created_at</span><span class="sf-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-frow"><span class="sf-type">TIMESTAMPTZ</span><span class="sf-name">updated_at</span><span class="sf-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-frow"><span class="sf-type">TIMESTAMPTZ</span><span class="sf-name">deleted_at</span><span class="sf-tags"></span></div>
+        <div class="schema-note"><code style="color:var(--cyan);font-size:.9em">estado_codigo</code> refleja el estado <em>actual</em>.<br>El historial completo vive en <code style="color:var(--cyan);font-size:.9em">HistorialEstadoPedido</code>.</div>
+      </div>
+      <div class="schema-card">
+        <div class="schema-head"><span class="tbl-stereo st-table">Table</span><span class="schema-title">HistorialEstadoPedido</span><span class="schema-role">append-only · sin UPDATE / DELETE</span></div>
+        <div class="schema-sep">PK</div>
+        <div class="schema-frow pk-row"><span class="sf-type">BIGSERIAL</span><span class="sf-name is-pk">id</span><span class="sf-tags"><span class="tag t-pk">PK</span></span></div>
+        <div class="schema-sep">FK de trazabilidad</div>
+        <div class="schema-frow highlighted"><span class="sf-type">BIGINT</span><span class="sf-name is-key">pedido_id</span><span class="sf-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-frow highlighted"><span class="sf-type">VARCHAR(20)</span><span class="sf-name is-key">estado_desde</span><span class="sf-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="schema-frow highlighted"><span class="sf-type">VARCHAR(20)</span><span class="sf-name is-key">estado_hacia</span><span class="sf-tags"><span class="tag t-fk">FK</span><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-frow"><span class="sf-type">BIGINT</span><span class="sf-name is-fk">usuario_id</span><span class="sf-tags"><span class="tag t-fk">FK</span></span></div>
+        <div class="schema-sep">Atributos</div>
+        <div class="schema-frow"><span class="sf-type">TEXT</span><span class="sf-name">motivo</span><span class="sf-tags"></span></div>
+        <div class="schema-sep">Audit</div>
+        <div class="schema-frow"><span class="sf-type">TIMESTAMPTZ</span><span class="sf-name">created_at</span><span class="sf-tags"><span class="tag t-nn">NN</span></span></div>
+        <div class="schema-note"><code style="color:var(--cyan);font-size:.9em">estado_desde = NULL</code> → transición inicial.<br>Reconstruir: <code style="color:var(--cyan);font-size:.9em">ORDER BY created_at ASC</code>.<br>Validar <code style="color:var(--cyan);font-size:.9em">es_terminal</code> antes de insertar.</div>
+      </div>
+    </div>
+
+    <!-- FK Bridge -->
+    <div class="fk-bridge">
+      <div class="fk-ent"><div class="fk-ent-dot" style="background:var(--yellow)"></div>Pedido<span style="font-size:.48rem;color:var(--text3);margin-left:.3rem">id · estado_codigo</span></div>
+      <div class="fk-pipe">
+        <div class="fk-pipe-line"></div>
+        <div class="fk-pipe-meta">
+          <span class="fk-meta-row"><code>pedido_id FK</code> · ON DELETE CASCADE</span>
+          <span class="fk-meta-row">Cada fila = una transición de estado</span>
+        </div>
+      </div>
+      <div class="fk-ent"><div class="fk-ent-dot" style="background:var(--blue)"></div>HistorialEstadoPedido<span style="font-size:.48rem;color:var(--text3);margin-left:.3rem">estado_desde · estado_hacia</span></div>
+      <div style="margin-left:auto;display:flex;flex-direction:column;gap:.3rem;font-size:.54rem;color:var(--text3);padding-left:1rem;border-left:1px solid var(--border2)">
+        <span><code style="color:var(--cyan);font-size:.9em">estado_desde FK → EstadoPedido</code> &nbsp;ON DELETE SET NULL</span>
+        <span><code style="color:var(--cyan);font-size:.9em">estado_hacia FK → EstadoPedido</code> &nbsp;ON DELETE RESTRICT</span>
+        <span>Tabla <strong style="color:var(--text2)">append-only</strong> — audit trail completo e inmutable</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="no-results" id="noResults" style="display:none;padding:3rem;text-align:center;font-size:.65rem;color:var(--text3);letter-spacing:.06em">
+    Sin resultados para "<span id="noResultsTerm"></span>"
+  </div>
+
+</main>
+
+<footer>
+  <span>ERD v3.0</span> · Sistema de Pedidos de Comida ·
+  <span>12 entidades</span> · <span>19 relaciones FK</span> · <span>3FN</span> ·
+  TIMESTAMPTZ · Soft-delete · Snapshot · Audit Trail ·
+  <span>sistema_pedidos_erd.puml</span> · <span>sistema_pedidos_estados.puml</span>
+</footer>
+
+<script>
+function setActive(el){document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));el.classList.add('active')}
+
+const input=document.getElementById('searchInput');
+const count=document.getElementById('searchCount');
+const noRes=document.getElementById('noResults');
+const noResTerm=document.getElementById('noResultsTerm');
+
+input.addEventListener('input',()=>{
+  const q=input.value.trim().toLowerCase();
+  if(!q){
+    document.querySelectorAll('.tbl').forEach(t=>{t.classList.remove('hidden','hl-table')});
+    document.querySelectorAll('.frow').forEach(r=>r.classList.remove('hidden','hl-field'));
+    document.querySelectorAll('.tbl-sec').forEach(s=>s.classList.remove('hidden'));
+    document.querySelectorAll('.domain').forEach(d=>d.style.display='');
+    document.querySelectorAll('.rel-section,#pat-section,#trace-section').forEach(s=>s.style.display='');
+    count.textContent='';noRes.style.display='none';return;
+  }
+  let n=0;
+  document.querySelectorAll('.tbl').forEach(tbl=>{
+    const nm=tbl.dataset.name||'';
+    const tm=nm.includes(q);
+    let fm=false;
+    tbl.querySelectorAll('.frow').forEach(row=>{
+      const fn=row.querySelector('.f-name')?.textContent?.toLowerCase()||'';
+      const ft=row.querySelector('.f-type')?.textContent?.toLowerCase()||'';
+      const m=fn.includes(q)||ft.includes(q);
+      row.classList.toggle('hidden',!m&&!tm);
+      row.classList.toggle('hl-field',m&&!tm);
+      if(m)fm=true;
+    });
+    tbl.querySelectorAll('.tbl-sec').forEach(s=>s.classList.toggle('hidden',!tm&&!fm));
+    const v=tm||fm;
+    tbl.classList.toggle('hidden',!v);
+    tbl.classList.toggle('hl-table',tm);
+    if(v)n++;
+  });
+  document.querySelectorAll('.domain').forEach(d=>{
+    d.style.display=d.querySelectorAll('.tbl:not(.hidden)').length?'':'none';
+  });
+  document.querySelectorAll('.rel-section,#pat-section,#trace-section').forEach(s=>s.style.display='none');
+  count.textContent=n?`${n}`:'';
+  noRes.style.display=n?'none':'block';
+  noResTerm.textContent=input.value.trim();
+});
+
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      const id=e.target.id;
+      const lk=document.querySelector(`.sidebar-link[href="#${id}"]`);
+      if(lk){document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));lk.classList.add('active')}
+    }
+  });
+},{threshold:0.15,rootMargin:'-52px 0px 0px 0px'});
+
+document.querySelectorAll('.domain,.rel-section,#pat-section,#trace-section,.tbl[id]').forEach(el=>obs.observe(el));
+</script>
+</body>
+</html>
