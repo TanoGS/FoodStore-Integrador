@@ -70,4 +70,4 @@ from app.modules.categoria.models import Categoria
 
 ## Corre la migración: 
 alembic revision --autogenerate -m "Tabla categorias" 
-upgrade head.
+alembic upgrade head
