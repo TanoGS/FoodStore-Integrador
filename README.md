@@ -1,5 +1,9 @@
 
-### 2. Configurar y levantar el Backend (FastAPI)
+Integrantes: Renzo Sosa, Sponton Giani
+
+Link video Primer Parcial: https://youtu.be/qEJGTZU9tY8
+
+Configurar y levantar el Backend (FastAPI)
 
 1. Abre una terminal y dirígete a la carpeta del backend:
    \`\`\`bash

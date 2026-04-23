@@ -9,7 +9,6 @@ from .service import CategoriaService
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
 
-# Inyector de dependencias (Factory)
 def get_categoria_service(session: Session = Depends(get_session)) -> CategoriaService:
     uow = CategoriaUnitOfWork(session)
     return CategoriaService(uow)

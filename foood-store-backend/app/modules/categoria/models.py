@@ -1,10 +1,12 @@
-from typing import Optional, List
+from typing import TYPE_CHECKING, Optional, List
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime
+from app.modules.producto.models import ProductoCategoria
+if TYPE_CHECKING:
+    from app.modules.producto.models import Producto
 
 class Categoria(SQLModel, table=True):
-  
-    
+   
     id: Optional[int] = Field(default=None, primary_key=True)
     nombre: str = Field(index=True, unique=True, max_length=100)
     descripcion: Optional[str] = Field(default=None, max_length=255)
@@ -15,7 +17,7 @@ class Categoria(SQLModel, table=True):
     # Soft Delete
     eliminado_en: Optional[datetime] = Field(default=None)
 
-    # Relaciones de SQLModel (Opcionales, pero muy útiles para ORM)
+    # Relaciones de SQLModel 
     subcategorias: List["Categoria"] = Relationship(
         back_populates="padre",
         sa_relationship_kwargs={"cascade": "all, delete"}
@@ -24,3 +26,5 @@ class Categoria(SQLModel, table=True):
         back_populates="subcategorias", 
         sa_relationship_kwargs={"remote_side": "Categoria.id"}
     )
+
+    productos: List["Producto"] = Relationship(back_populates="categorias", link_model=ProductoCategoria)

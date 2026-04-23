@@ -28,7 +28,7 @@ def root():
     return {"message": "Bienvenido a la API de Food Store"}
 
 
-# Conectamos las rutas de categorías a la API
+# Rutas de categorías a la API
 app.include_router(usuarios_router, prefix=settings.API_V1_STR)
 app.include_router(categoria_router, prefix=settings.API_V1_STR)
 app.include_router(producto_router, prefix=settings.API_V1_STR)

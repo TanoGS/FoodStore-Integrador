@@ -1,6 +1,14 @@
-from typing import Optional
-from sqlmodel import SQLModel, Field
+from typing import TYPE_CHECKING, Optional, List
+from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime
+if TYPE_CHECKING:
+    from app.modules.categoria.models import Categoria
+
+# --- Tabla Intermedia ---
+class ProductoCategoria(SQLModel, table=True):
+    __tablename__ = "producto_categoria"
+    producto_id: int = Field(foreign_key="producto.id", primary_key=True)
+    categoria_id: int = Field(foreign_key="categoria.id", primary_key=True)
 
 # --- Modelo Principal ---
 class Producto(SQLModel, table=True):
@@ -14,22 +22,10 @@ class Producto(SQLModel, table=True):
     imagen_url: Optional[str] = Field(default=None)
     stock_disponible: int = Field(default=0)
     activo: bool = Field(default=True)
-
-    # Soft Delete
     eliminado_en: Optional[datetime] = Field(default=None)
 
-# --- Tablas Intermedias ---
-class ProductoCategoria(SQLModel, table=True):
-    __tablename__ = "producto_categoria"
-    producto_id: int = Field(foreign_key="producto.id", primary_key=True)
-    categoria_id: int = Field(foreign_key="categoria.id", primary_key=True)
-
-class ProductoIngrediente(SQLModel, table=True):
-    __tablename__ = "producto_ingrediente"
-    producto_id: int = Field(foreign_key="producto.id", primary_key=True)
-    ingrediente_id: int = Field(foreign_key="ingrediente.id", primary_key=True)
-    es_removible: bool = Field(default=True)
-    precio_adicional: float = Field(default=0.0)
-
-
- 
+  
+    categorias: List["Categoria"] = Relationship(
+        back_populates="productos", 
+        link_model=ProductoCategoria
+    )

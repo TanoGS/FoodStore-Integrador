@@ -20,3 +20,13 @@ class UsuarioRepository:
     def get_all(self, skip: int = 0, limit: int = 100) -> List[Usuario]:
         statement = select(Usuario).offset(skip).limit(limit)
         return self.session.exec(statement).all()
+    
+    def get_activos(self, skip: int = 0, limit: int = 100) -> List[Usuario]:
+        """Trae solo los usuarios donde activo == True."""
+        statement = select(Usuario).where(Usuario.activo == True).offset(skip).limit(limit)
+        return self.session.exec(statement).all()
+
+    def get_eliminados(self, skip: int = 0, limit: int = 100) -> List[Usuario]:
+        """Trae solo los usuarios donde activo == False (Soft Delete)."""
+        statement = select(Usuario).where(Usuario.activo == False).offset(skip).limit(limit)
+        return self.session.exec(statement).all()

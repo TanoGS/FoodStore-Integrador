@@ -1,11 +1,10 @@
-from time import timezone
 from typing import List
 
 from fastapi import HTTPException, status
 from .schemas import UsuarioCreate, UsuarioUpdate
 from .models import Usuario
 from .unit_of_work import UsuarioUnitOfWork
-from datetime import datetime
+from datetime import datetime, timezone
 
 class UsuarioService:
     def __init__(self, uow: UsuarioUnitOfWork):
@@ -69,3 +68,9 @@ class UsuarioService:
         except Exception as e:
             self.uow.rollback()
             raise HTTPException(status_code=500, detail=str(e))
+        
+    def listar_activos(self, skip: int, limit: int) -> List[Usuario]:
+        return self.uow.usuarios.get_activos(skip, limit)
+
+    def listar_eliminados(self, skip: int, limit: int) -> List[Usuario]:
+        return self.uow.usuarios.get_eliminados(skip, limit)

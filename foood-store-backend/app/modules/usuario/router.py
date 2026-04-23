@@ -22,6 +22,16 @@ def registrar_nuevo_usuario(
 def listar_usuarios(skip: int = 0, limit: int = 100, service: UsuarioService = Depends(get_usuario_service)):
     return service.obtener_usuarios(skip, limit)
 
+@router.get("/activos", response_model=list[UsuarioResponse])
+def get_activos(skip: int = 0, limit: int = 100, service: UsuarioService = Depends(get_usuario_service)):
+    """Lista solo los usuarios activos."""
+    return service.listar_activos(skip, limit)
+
+@router.get("/eliminados", response_model=list[UsuarioResponse])
+def get_eliminados(skip: int = 0, limit: int = 100, service: UsuarioService = Depends(get_usuario_service)):
+    """Lista solo los usuarios que tienen soft-delete (inactivos)."""
+    return service.listar_eliminados(skip, limit)
+
 @router.get("/{id}", response_model=UsuarioResponse)
 def obtener_usuario(id: int, service: UsuarioService = Depends(get_usuario_service)):
     return service.obtener_usuario_por_id(id)
