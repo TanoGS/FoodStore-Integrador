@@ -4,7 +4,7 @@ from typing import List
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Food Store API"
     VERSION: str = "1.0.0"
-    API_V1_STR: str = "/api/v1"
+    API_V1_STR: str = "/api"
     
     # Base de Datos
     DATABASE_URL: str

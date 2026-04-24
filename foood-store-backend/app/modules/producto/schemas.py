@@ -1,0 +1,32 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+
+class ProductoBase(BaseModel):
+    nombre: str = Field(..., max_length=100)
+    descripcion: Optional[str] = None
+    precio_base: float = Field(..., ge=0, description="El precio no puede ser negativo")
+    es_personalizable: bool = False
+    imagen_url: Optional[str] = None
+    stock_disponible: int = Field(default=0, ge=0)
+    activo: bool = True
+
+class ProductoCreate(ProductoBase):
+    categoria_ids: List[int] = Field(default=[], description="Lista de IDs de categorías asociadas")
+
+class ProductoResponse(ProductoBase):
+    id: int
+    eliminado_en: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ProductoUpdate(BaseModel):
+    nombre: Optional[str] = Field(None, max_length=100)
+    descripcion: Optional[str] = None
+    precio_base: Optional[float] = Field(None, ge=0)
+    es_personalizable: Optional[bool] = None
+    imagen_url: Optional[str] = None
+    stock_disponible: Optional[int] = Field(None, ge=0)
+    activo: Optional[bool] = None
+    categoria_ids: Optional[List[int]] = None

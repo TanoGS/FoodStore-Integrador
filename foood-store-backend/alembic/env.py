@@ -2,7 +2,7 @@ import os
 import sys
 from logging.config import fileConfig
 
-# 1. Agregamos la carpeta raíz del backend al PATH de Python para que encuentre nuestros módulos
+# Agregamos la carpeta raíz del backend al PATH de Python para que encuentre nuestros módulos
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import engine_from_config
@@ -10,26 +10,26 @@ from sqlalchemy import pool
 from alembic import context
 from sqlmodel import SQLModel
 
-# 2. Importamos nuestra configuración y modelos
+# Modelos Catálogo de Productos
 from core.config import settings
-from app.modules.categorias.models import Categoria
-from app.modules.ingredientes.models import Ingrediente
-from app.modules.productos.models import Producto, ProductoCategoria, ProductoIngrediente
+from app.modules.categoria.models import Categoria
+from app.modules.ingrediente.models import Ingrediente
+from app.modules.producto.models import Producto
 
-# Modelos de Identidad y Acceso
-from app.modules.usuarios.models import Rol, Usuario
+# Modelos Identidad y Acceso
+from app.modules.usuario.models import Usuario
 
 # Objeto de configuración de Alembic
 config = context.config
 
-# 3. CRÍTICO: Sobrescribimos la URL vacía de alembic.ini con la de nuestro .env
+# CRÍTICO: Sobrescribimos la URL vacía de alembic.ini con la de nuestro .env
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Configuración de logs
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 4. Asignamos la metadata de SQLModel
+#  Metadata de SQLModel
 target_metadata = SQLModel.metadata
 
 # other values from the config, defined by the needs of env.py,
