@@ -1,36 +1,83 @@
-from fastapi import APIRouter, Depends, status
-from typing import List
+from fastapi import APIRouter, Depends, Query, status
 from sqlmodel import Session
 
 from core.database import get_session
-from .schemas import ProductoCreate, ProductoResponse, ProductoUpdate
-from .unit_of_work import ProductoUnitOfWork
-from .service import ProductoService
+from app.modules.producto.schemas import (
+    ProductoCreate, ProductoPublic, ProductoUpdate, ProductoList,
+)
+from app.modules.producto.service import ProductoService
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
+
 def get_producto_service(session: Session = Depends(get_session)) -> ProductoService:
-    return ProductoService(ProductoUnitOfWork(session))
+    """Factory de dependencia: inyecta el servicio con su Session."""
+    return ProductoService(session)
 
-@router.post("/", response_model=ProductoResponse, status_code=status.HTTP_201_CREATED)
-def crear_producto(producto_in: ProductoCreate, service: ProductoService = Depends(get_producto_service)):
-    return service.crear(producto_in)
 
-@router.get("/", response_model=List[ProductoResponse], status_code=status.HTTP_200_OK)
-def listar_productos(service: ProductoService = Depends(get_producto_service)):
-    return service.listar_activos()
+# ── Endpoints ─────────────────────────────────────────────────────────────────────────────
 
-@router.patch("/{id}", response_model=ProductoResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/",
+    response_model=ProductoPublic,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear un producto",
+)
+def crear_producto(
+    data: ProductoCreate,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoPublic:
+    return svc.crear(data)
+
+
+@router.get(
+    "/",
+    response_model=ProductoList,
+    status_code=status.HTTP_200_OK,
+    summary="Listar productos activos (paginado)",
+)
+def listar_productos(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoList:
+    return svc.listar_activos(offset=offset, limit=limit)
+
+
+@router.get(
+    "/{id}",
+    response_model=ProductoPublic,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener producto por ID",
+)
+def obtener_producto(
+    id: int,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoPublic:
+    return svc.obtener_por_id(id)
+
+
+@router.patch(
+    "/{id}",
+    response_model=ProductoPublic,
+    status_code=status.HTTP_200_OK,
+    summary="Actualización parcial de producto",
+)
 def actualizar_producto(
-    id: int, 
-    producto_in: ProductoUpdate, 
-    service: ProductoService = Depends(get_producto_service)
-):
-    return service.actualizar(id, producto_in)
+    id: int,
+    data: ProductoUpdate,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoPublic:
+    return svc.actualizar(id, data)
 
-@router.delete("/{id}", status_code=status.HTTP_200_OK)
+
+@router.delete(
+    "/{id}",
+    status_code=status.HTTP_200_OK,
+    summary="Soft delete de producto",
+)
 def eliminar_producto(
-    id: int, 
-    service: ProductoService = Depends(get_producto_service)
+    id: int,
+    svc: ProductoService = Depends(get_producto_service),
 ):
-    return service.eliminar_logicamente(id)
+    return svc.eliminar_logicamente(id)

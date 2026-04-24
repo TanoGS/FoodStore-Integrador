@@ -1,66 +1,94 @@
+# app/modules/ingrediente/service.py
 from fastapi import HTTPException, status
 from datetime import datetime, timezone
-from .schemas import IngredienteCreate, IngredienteUpdate
-from .models import Ingrediente
-from .unit_of_work import IngredienteUnitOfWork
+from sqlmodel import Session
+
+from app.modules.ingrediente.models import Ingrediente
+from app.modules.ingrediente.schemas import (
+    IngredienteCreate, IngredienteUpdate, IngredientePublic, IngredienteList,
+)
+from app.modules.ingrediente.unit_of_work import IngredienteUnitOfWork
+
 
 class IngredienteService:
-    def __init__(self, uow: IngredienteUnitOfWork):
-        self.uow = uow
+    """
+    Capa de lógica de negocio para Ingredientes.
 
-    def crear(self, data: IngredienteCreate) -> Ingrediente:
-        if self.uow.ingredientes.get_by_nombre(data.nombre):
+    Responsabilidades:
+    - Validaciones de dominio (nombre único, etc.)
+    - Coordinar repositorios a través del UoW
+    - Levantar HTTPException cuando corresponde
+    - NUNCA acceder directamente a la Session
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    # ── Helpers privados ──────────────────────────────────────────────────────────────────
+
+    def _get_or_404(self, uow: IngredienteUnitOfWork, ingrediente_id: int) -> Ingrediente:
+        ingrediente = uow.ingredientes.get_by_id(ingrediente_id)
+        if not ingrediente or ingrediente.eliminado_en is not None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="Ya existe un ingrediente con este nombre."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ingrediente con id={ingrediente_id} no encontrado.",
+            )
+        return ingrediente
+
+    def _assert_nombre_unique(self, uow: IngredienteUnitOfWork, nombre: str) -> None:
+        if uow.ingredientes.get_by_nombre(nombre):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Ya existe un ingrediente con el nombre '{nombre}'.",
             )
 
-        try:
-            nuevo_ingrediente = Ingrediente(**data.model_dump())
-            self.uow.ingredientes.add(nuevo_ingrediente)
-            self.uow.commit()
-            self.uow.session.refresh(nuevo_ingrediente)
-            return nuevo_ingrediente
-        except Exception as e:
-            self.uow.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+    # ── Casos de uso ─────────────────────────────────────────────────────────────────
 
-    def listar_activos(self) -> list[Ingrediente]:
-        return self.uow.ingredientes.get_all_activos()
+    def crear(self, data: IngredienteCreate) -> IngredientePublic:
+        with IngredienteUnitOfWork(self._session) as uow:
+            self._assert_nombre_unique(uow, data.nombre)
+            nuevo = Ingrediente.model_validate(data)
+            uow.ingredientes.add(nuevo)
+            result = IngredientePublic.model_validate(nuevo)
+        return result
 
-    def actualizar(self, id: int, data: IngredienteUpdate) -> Ingrediente:
-        ingrediente = self.uow.ingredientes.get_by_id(id)
-        if not ingrediente or ingrediente.eliminado_en is not None:
-            raise HTTPException(status_code=404, detail="Ingrediente no encontrado.")
+    def listar_activos(self, offset: int = 0, limit: int = 20) -> IngredienteList:
+        with IngredienteUnitOfWork(self._session) as uow:
+            ingredientes = uow.ingredientes.get_all_activos(offset=offset, limit=limit)
+            total = uow.ingredientes.count_activos()
+            result = IngredienteList(
+                data=[IngredientePublic.model_validate(i) for i in ingredientes],
+                total=total,
+            )
+        return result
 
-        if data.nombre and data.nombre != ingrediente.nombre:
-            if self.uow.ingredientes.get_by_nombre(data.nombre):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, 
-                    detail="Ya existe otro ingrediente con este nombre."
-                )
+    def obtener_por_id(self, ingrediente_id: int) -> IngredientePublic:
+        with IngredienteUnitOfWork(self._session) as uow:
+            ingrediente = self._get_or_404(uow, ingrediente_id)
+            result = IngredientePublic.model_validate(ingrediente)
+        return result
 
-        update_data = data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(ingrediente, key, value)
+    def actualizar(self, ingrediente_id: int, data: IngredienteUpdate) -> IngredientePublic:
+        with IngredienteUnitOfWork(self._session) as uow:
+            ingrediente = self._get_or_404(uow, ingrediente_id)
 
-        try:
-            self.uow.commit()
-            self.uow.session.refresh(ingrediente)
-            return ingrediente
-        except Exception as e:
-            self.uow.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+            if data.nombre and data.nombre != ingrediente.nombre:
+                self._assert_nombre_unique(uow, data.nombre)
 
-    def eliminar_logicamente(self, id: int):
-        ingrediente = self.uow.ingredientes.get_by_id(id)
-        if not ingrediente or ingrediente.eliminado_en is not None:
-            raise HTTPException(status_code=404, detail="Ingrediente no encontrado.")
+            patch = data.model_dump(exclude_unset=True)
+            for field, value in patch.items():
+                setattr(ingrediente, field, value)
 
-        try:
+            uow.ingredientes.add(ingrediente)
+            result = IngredientePublic.model_validate(ingrediente)
+
+        return result
+
+    def eliminar_logicamente(self, ingrediente_id: int) -> dict:
+        with IngredienteUnitOfWork(self._session) as uow:
+            ingrediente = self._get_or_404(uow, ingrediente_id)
             ingrediente.eliminado_en = datetime.now(timezone.utc)
-            self.uow.commit()
-            return {"message": f"Ingrediente '{ingrediente.nombre}' eliminado correctamente."}
-        except Exception as e:
-            self.uow.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+            uow.ingredientes.add(ingrediente)
+            nombre = ingrediente.nombre  # capturar antes del commit
+
+        return {"message": f"Ingrediente '{nombre}' eliminado correctamente."}

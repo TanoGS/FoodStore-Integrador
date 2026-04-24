@@ -1,15 +1,17 @@
 from sqlmodel import Session
-from .repository import ProductoRepository
+from core.unit_of_work import UnitOfWork
+from app.modules.producto.repository import ProductoRepository
 from app.modules.categoria.repository import CategoriaRepository
 
-class ProductoUnitOfWork:
-    def __init__(self, session: Session):
-        self.session = session
-        self.productos = ProductoRepository(session)
-        self.categorias = CategoriaRepository(session)
-        
-    def commit(self):
-        self.session.commit()
 
-    def rollback(self):
-        self.session.rollback()
+class ProductoUnitOfWork(UnitOfWork):
+    """
+    UoW del módulo producto.
+    Expone ProductoRepository y CategoriaRepository porque
+    asignar categorías a un producto toca ambas entidades en la misma transacción.
+    """
+
+    def __init__(self, session: Session) -> None:
+        super().__init__(session)
+        self.productos = ProductoRepository(session)
+        self.categorias = CategoriaRepository(session)  # cross-module, misma transacción

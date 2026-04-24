@@ -1,21 +1,33 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
+from sqlmodel import SQLModel, Field
 from datetime import datetime
 
-class IngredienteBase(BaseModel):
-    nombre: str = Field(..., max_length=100)
+
+# ── Entrada ─────────────────────────────────────────────────────────────────────────────
+
+class IngredienteCreate(SQLModel):
+    """Body para POST /ingredientes/"""
+    nombre: str = Field(max_length=100)
     es_alergeno: bool = False
 
-class IngredienteCreate(IngredienteBase):
-    pass
 
-class IngredienteUpdate(BaseModel):
-    nombre: Optional[str] = Field(None, max_length=100)
+class IngredienteUpdate(SQLModel):
+    """Body para PATCH /ingredientes/{id} — todos los campos opcionales."""
+    nombre: Optional[str] = Field(default=None, max_length=100)
     es_alergeno: Optional[bool] = None
 
-class IngredienteResponse(IngredienteBase):
+
+# ── Salida ─────────────────────────────────────────────────────────────────────────────
+
+class IngredientePublic(SQLModel):
+    """Response model: campos que se exponen al cliente."""
     id: int
+    nombre: str
+    es_alergeno: bool
     eliminado_en: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+
+class IngredienteList(SQLModel):
+    """Response model paginado para GET /ingredientes/"""
+    data: List[IngredientePublic]
+    total: int
