@@ -18,6 +18,9 @@ class Categoria(SQLModel, table=True):
     eliminado_en: Optional[datetime] = Field(default=None)
 
     # Relaciones de SQLModel 
+    # ADVERTENCIA: cascade="all, delete" dispara borrado físico en cascada si se llama
+    # session.delete(categoria). Para soft-delete usar SIEMPRE eliminar_logicamente()
+    # del servicio, que solo hace UPDATE de eliminado_en. Nunca llamar repo.delete().
     subcategorias: List["Categoria"] = Relationship(
         back_populates="padre",
         sa_relationship_kwargs={"cascade": "all, delete"}

@@ -1,14 +1,15 @@
 from sqlmodel import Session
-from .repository import CategoriaRepository
+from core.unit_of_work import UnitOfWork
+from app.modules.categoria.repository import CategoriaRepository
 
-class CategoriaUnitOfWork:
-    def __init__(self, session: Session):
-        self.session = session
-        # Instanciamos el repositorio inyectándole la sesión actual
+
+class CategoriaUnitOfWork(UnitOfWork):
+    """
+    UoW del módulo categoria.
+    Expone los repositorios que el servicio necesita coordinar
+    bajo una misma transacción.
+    """
+
+    def __init__(self, session: Session) -> None:
+        super().__init__(session)
         self.categorias = CategoriaRepository(session)
-
-    def commit(self):
-        self.session.commit()
-
-    def rollback(self):
-        self.session.rollback()

@@ -1,22 +1,40 @@
 from sqlmodel import Session, select
-from typing import Optional, List
-from .models import Ingrediente
+from core.repository import BaseRepository
+from app.modules.ingrediente.models import Ingrediente
 
-class IngredienteRepository:
-    def __init__(self, session: Session):
-        self.session = session
 
-    def add(self, ingrediente: Ingrediente) -> Ingrediente:
-        self.session.add(ingrediente)
-        return ingrediente
+class IngredienteRepository(BaseRepository[Ingrediente]):
+    """
+    Repositorio de Ingrediente.
+    Agrega queries específicas del dominio sobre el CRUD base.
+    Solo habla con la DB — nunca levanta HTTPException.
+    """
 
-    def get_by_id(self, id: int) -> Optional[Ingrediente]:
-        return self.session.get(Ingrediente, id)
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, Ingrediente)
 
-    def get_by_nombre(self, nombre: str) -> Optional[Ingrediente]:
-        statement = select(Ingrediente).where(Ingrediente.nombre == nombre)
-        return self.session.exec(statement).first()
+    def get_by_nombre(self, nombre: str) -> Ingrediente | None:
+        return self.session.exec(
+            select(Ingrediente).where(
+                Ingrediente.nombre == nombre,
+                Ingrediente.eliminado_en == None,  # noqa: E711
+            )
+        ).first()
 
-    def get_all_activos(self) -> List[Ingrediente]:
-        statement = select(Ingrediente).where(Ingrediente.eliminado_en == None)
-        return self.session.exec(statement).all()
+    def get_all_activos(self, offset: int = 0, limit: int = 20) -> list[Ingrediente]:
+        return list(
+            self.session.exec(
+                select(Ingrediente)
+                .where(Ingrediente.eliminado_en == None)  # noqa: E711
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+
+    def count_activos(self) -> int:
+        return len(
+            self.session.exec(
+                select(Ingrediente)
+                .where(Ingrediente.eliminado_en == None)  # noqa: E711
+            ).all()
+        )

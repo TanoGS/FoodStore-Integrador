@@ -4,11 +4,20 @@ from datetime import datetime
 if TYPE_CHECKING:
     from app.modules.categoria.models import Categoria
 
-# --- Tabla Intermedia ---
+# --- Tabla Intermedia Producto-Categoria ---
 class ProductoCategoria(SQLModel, table=True):
     __tablename__ = "producto_categoria"
     producto_id: int = Field(foreign_key="producto.id", primary_key=True)
     categoria_id: int = Field(foreign_key="categoria.id", primary_key=True)
+
+
+# --- Tabla Intermedia Producto-Ingrediente ---
+class ProductoIngrediente(SQLModel, table=True):
+    __tablename__ = "producto_ingrediente"
+    producto_id: int = Field(foreign_key="producto.id", primary_key=True)
+    ingrediente_id: int = Field(foreign_key="ingrediente.id", primary_key=True)
+    es_removible: bool = Field(default=True)
+    precio_adicional: float = Field(default=0.0)
 
 # --- Modelo Principal ---
 class Producto(SQLModel, table=True):
