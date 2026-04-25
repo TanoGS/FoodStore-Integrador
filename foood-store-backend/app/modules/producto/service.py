@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlmodel import Session
 
-from app.modules.producto.models import Producto
+from app.modules.producto.models import Producto, ProductoIngrediente
 from app.modules.producto.schemas import (
     ProductoCreate, ProductoUpdate, ProductoPublic, ProductoList,
+    ProductoIngredienteCreate, IngredienteEnProducto, ProductoWithIngredientes,
 )
 from app.modules.producto.unit_of_work import ProductoUnitOfWork
 
@@ -32,6 +33,21 @@ class ProductoService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Producto con id={producto_id} no encontrado.",
+            )
+        return producto
+
+    def _get_eliminado_or_404(self, uow: ProductoUnitOfWork, producto_id: int) -> Producto:
+        """Busca un producto ELIMINADO para restaurarlo. 404 si no existe, 409 si está activo."""
+        producto = uow.productos.get_by_id(producto_id)
+        if not producto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Producto con id={producto_id} no encontrado.",
+            )
+        if producto.eliminado_en is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"El producto con id={producto_id} no está eliminado.",
             )
         return producto
 
@@ -97,8 +113,12 @@ class ProductoService:
                 producto.categorias = []
                 for cat_id in data.categoria_ids:
                     cat = uow.categorias.get_by_id(cat_id)
-                    if cat:
-                        producto.categorias.append(cat)
+                    if not cat or cat.eliminado_en is not None:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Categoría con id={cat_id} no válida.",
+                        )
+                    producto.categorias.append(cat)
 
             uow.productos.add(producto)
             result = ProductoPublic.model_validate(producto)
@@ -113,3 +133,92 @@ class ProductoService:
             nombre = producto.nombre  # capturar antes del commit
 
         return {"message": f"Producto '{nombre}' eliminado correctamente."}
+
+    def restaurar(self, producto_id: int) -> ProductoPublic:
+        """Revierte el soft-delete: setea eliminado_en a None y activo a True."""
+        with ProductoUnitOfWork(self._session) as uow:
+            producto = self._get_eliminado_or_404(uow, producto_id)
+            producto.eliminado_en = None
+            producto.activo = True
+            uow.productos.add(producto)
+            result = ProductoPublic.model_validate(producto)
+        return result
+
+    # ── Cross-module: ingredientes ──────────────────────────────────────────────────
+
+    def _build_producto_with_ingredientes(
+        self, uow: ProductoUnitOfWork, producto: Producto
+    ) -> ProductoWithIngredientes:
+        """
+        Helper interno: serializa un Producto con sus ingredientes activos y
+        los campos de la tabla `producto_ingrediente`.
+        DEBE llamarse dentro de un bloque `with uow:` para que la sesión esté abierta.
+        """
+        relaciones = uow.productos.get_relaciones_ingredientes(producto.id)
+        ingredientes_data: list[IngredienteEnProducto] = []
+        for rel in relaciones:
+            ing = uow.ingredientes.get_by_id(rel.ingrediente_id)
+            if ing and ing.eliminado_en is None:
+                ingredientes_data.append(
+                    IngredienteEnProducto(
+                        id=ing.id,
+                        nombre=ing.nombre,
+                        es_alergeno=ing.es_alergeno,
+                        es_removible=rel.es_removible,
+                        precio_adicional=rel.precio_adicional,
+                    )
+                )
+        return ProductoWithIngredientes(
+            id=producto.id,
+            nombre=producto.nombre,
+            descripcion=producto.descripcion,
+            precio_base=producto.precio_base,
+            es_personalizable=producto.es_personalizable,
+            imagen_url=producto.imagen_url,
+            stock_disponible=producto.stock_disponible,
+            activo=producto.activo,
+            eliminado_en=producto.eliminado_en,
+            ingredientes=ingredientes_data,
+        )
+
+    def get_with_ingredientes(self, producto_id: int) -> ProductoWithIngredientes:
+        """Retorna un producto activo con todos sus ingredientes activos embebidos."""
+        with ProductoUnitOfWork(self._session) as uow:
+            producto = self._get_or_404(uow, producto_id)
+            result = self._build_producto_with_ingredientes(uow, producto)
+        return result
+
+    def asignar_ingrediente(
+        self,
+        producto_id: int,
+        ingrediente_id: int,
+        data: ProductoIngredienteCreate,
+    ) -> ProductoWithIngredientes:
+        """Asocia un ingrediente a un producto con sus datos de relación."""
+        with ProductoUnitOfWork(self._session) as uow:
+            producto = self._get_or_404(uow, producto_id)
+
+            ingrediente = uow.ingredientes.get_by_id(ingrediente_id)
+            if not ingrediente or ingrediente.eliminado_en is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Ingrediente con id={ingrediente_id} no encontrado.",
+                )
+
+            existing = uow.productos.get_relacion_ingrediente(producto_id, ingrediente_id)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="El ingrediente ya está asociado a este producto.",
+                )
+
+            relacion = ProductoIngrediente(
+                producto_id=producto_id,
+                ingrediente_id=ingrediente_id,
+                es_removible=data.es_removible,
+                precio_adicional=data.precio_adicional,
+            )
+            uow.productos.add_relacion_ingrediente(relacion)
+
+            result = self._build_producto_with_ingredientes(uow, producto)
+        return result

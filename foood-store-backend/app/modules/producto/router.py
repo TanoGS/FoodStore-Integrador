@@ -4,6 +4,7 @@ from sqlmodel import Session
 from core.database import get_session
 from app.modules.producto.schemas import (
     ProductoCreate, ProductoPublic, ProductoUpdate, ProductoList,
+    ProductoIngredienteCreate, ProductoWithIngredientes,
 )
 from app.modules.producto.service import ProductoService
 
@@ -57,6 +58,19 @@ def obtener_producto(
     return svc.obtener_por_id(id)
 
 
+@router.get(
+    "/{id}/ingredientes",
+    response_model=ProductoWithIngredientes,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener producto con sus ingredientes embebidos",
+)
+def obtener_producto_con_ingredientes(
+    id: int,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoWithIngredientes:
+    return svc.get_with_ingredientes(id)
+
+
 @router.patch(
     "/{id}",
     response_model=ProductoPublic,
@@ -81,3 +95,35 @@ def eliminar_producto(
     svc: ProductoService = Depends(get_producto_service),
 ):
     return svc.eliminar_logicamente(id)
+
+
+@router.post(
+    "/{id}/restaurar",
+    response_model=ProductoPublic,
+    status_code=status.HTTP_200_OK,
+    summary="Restaurar producto eliminado (revertir soft-delete)",
+)
+def restaurar_producto(
+    id: int,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoPublic:
+    return svc.restaurar(id)
+
+
+@router.post(
+    "/{id}/ingredientes/{ingrediente_id}",
+    response_model=ProductoWithIngredientes,
+    status_code=status.HTTP_200_OK,
+    summary="Asociar un ingrediente a un producto",
+)
+def asignar_ingrediente(
+    id: int,
+    ingrediente_id: int,
+    data: ProductoIngredienteCreate,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoWithIngredientes:
+    return svc.asignar_ingrediente(
+        producto_id=id,
+        ingrediente_id=ingrediente_id,
+        data=data,
+    )

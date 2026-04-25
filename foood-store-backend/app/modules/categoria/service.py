@@ -6,7 +6,9 @@ from sqlmodel import Session
 from app.modules.categoria.models import Categoria
 from app.modules.categoria.schemas import (
     CategoriaCreate, CategoriaUpdate, CategoriaPublic, CategoriaList,
+    CategoriaWithProductos, CategoriaConProductosList,
 )
+from app.modules.producto.schemas import ProductoPublic
 from app.modules.categoria.unit_of_work import CategoriaUnitOfWork
 
 
@@ -38,6 +40,21 @@ class CategoriaService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Categoría con id={categoria_id} no encontrada.",
+            )
+        return categoria
+
+    def _get_eliminado_or_404(self, uow: CategoriaUnitOfWork, categoria_id: int) -> Categoria:
+        """Busca una categoría ELIMINADA para restaurarla. 404 si no existe, 409 si está activa."""
+        categoria = uow.categorias.get_by_id(categoria_id)
+        if not categoria:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Categoría con id={categoria_id} no encontrada.",
+            )
+        if categoria.eliminado_en is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"La categoría con id={categoria_id} no está eliminada.",
             )
         return categoria
 
@@ -95,7 +112,9 @@ class CategoriaService:
                 self._assert_nombre_unique(uow, data.nombre)
 
             if data.padre_id is not None:
-                if data.padre_id == categoria_id:
+                if data.padre_id == 0:
+                    data.padre_id = None
+                elif data.padre_id == categoria_id:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Una categoría no puede ser subcategoría de sí misma.",
@@ -124,3 +143,61 @@ class CategoriaService:
             nombre = categoria.nombre  # capturar antes del commit
 
         return {"message": f"Categoría '{nombre}' eliminada correctamente."}
+
+    def restaurar(self, categoria_id: int) -> CategoriaPublic:
+        """Revierte el soft-delete: setea eliminado_en a None."""
+        with CategoriaUnitOfWork(self._session) as uow:
+            categoria = self._get_eliminado_or_404(uow, categoria_id)
+            categoria.eliminado_en = None
+            uow.categorias.add(categoria)
+            result = CategoriaPublic.model_validate(categoria)
+        return result
+
+    # ── Cross-module ────────────────────────────────────────────────────────────────
+
+    def _build_categoria_with_productos(self, categoria: Categoria) -> CategoriaWithProductos:
+        """
+        Helper interno: serializa una Categoria con sus productos activos.
+        DEBE llamarse dentro de un bloque `with uow:` para que la sesión
+        esté abierta al dispararse el lazy load de `categoria.productos`.
+        """
+        productos_activos = [
+            ProductoPublic.model_validate(p)
+            for p in categoria.productos
+            if p.eliminado_en is None and p.activo
+        ]
+        return CategoriaWithProductos(
+            id=categoria.id,
+            nombre=categoria.nombre,
+            descripcion=categoria.descripcion,
+            padre_id=categoria.padre_id,
+            eliminado_en=categoria.eliminado_en,
+            productos=productos_activos,
+        )
+
+    def get_with_productos(self, categoria_id: int) -> CategoriaWithProductos:
+        """Retorna una categoría activa con todos sus productos activos embebidos."""
+        with CategoriaUnitOfWork(self._session) as uow:
+            categoria = self._get_or_404(uow, categoria_id)
+            result = self._build_categoria_with_productos(categoria)
+        return result
+
+    def listar_con_productos(self, offset: int = 0, limit: int = 20) -> CategoriaConProductosList:
+        """Lista categorías activas (paginadas) con sus productos activos embebidos."""
+        with CategoriaUnitOfWork(self._session) as uow:
+            categorias = uow.categorias.get_all_activas(offset=offset, limit=limit)
+            total = uow.categorias.count_activas()
+            data = [self._build_categoria_with_productos(c) for c in categorias]
+            result = CategoriaConProductosList(data=data, total=total)
+        return result
+
+    def listar_subcategorias(self, categoria_id: int) -> CategoriaList:
+        """Retorna los hijos directos activos de una categoría."""
+        with CategoriaUnitOfWork(self._session) as uow:
+            self._get_or_404(uow, categoria_id)  # valida que el padre exista y esté activo
+            subcategorias = uow.categorias.get_subcategorias(categoria_id)
+            result = CategoriaList(
+                data=[CategoriaPublic.model_validate(c) for c in subcategorias],
+                total=len(subcategorias),
+            )
+        return result

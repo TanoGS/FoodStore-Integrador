@@ -92,3 +92,22 @@ class IngredienteService:
             nombre = ingrediente.nombre  # capturar antes del commit
 
         return {"message": f"Ingrediente '{nombre}' eliminado correctamente."}
+
+    def restaurar(self, ingrediente_id: int) -> IngredientePublic:
+        """Revierte el soft-delete: setea eliminado_en a None."""
+        with IngredienteUnitOfWork(self._session) as uow:
+            ingrediente = uow.ingredientes.get_by_id(ingrediente_id)
+            if not ingrediente:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Ingrediente con id={ingrediente_id} no encontrado.",
+                )
+            if ingrediente.eliminado_en is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"El ingrediente con id={ingrediente_id} no está eliminado.",
+                )
+            ingrediente.eliminado_en = None
+            uow.ingredientes.add(ingrediente)
+            result = IngredientePublic.model_validate(ingrediente)
+        return result

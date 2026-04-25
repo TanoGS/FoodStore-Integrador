@@ -15,7 +15,10 @@ class IngredienteRepository(BaseRepository[Ingrediente]):
 
     def get_by_nombre(self, nombre: str) -> Ingrediente | None:
         return self.session.exec(
-            select(Ingrediente).where(Ingrediente.nombre == nombre)
+            select(Ingrediente).where(
+                Ingrediente.nombre == nombre,
+                Ingrediente.eliminado_en == None,  # noqa: E711
+            )
         ).first()
 
     def get_all_activos(self, offset: int = 0, limit: int = 20) -> list[Ingrediente]:

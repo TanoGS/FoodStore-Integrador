@@ -15,7 +15,10 @@ class CategoriaRepository(BaseRepository[Categoria]):
 
     def get_by_nombre(self, nombre: str) -> Categoria | None:
         return self.session.exec(
-            select(Categoria).where(Categoria.nombre == nombre)
+            select(Categoria).where(
+                Categoria.nombre == nombre,
+                Categoria.eliminado_en == None,  # noqa: E711
+            )
         ).first()
 
     def get_all_activas(self, offset: int = 0, limit: int = 20) -> list[Categoria]:
@@ -32,5 +35,17 @@ class CategoriaRepository(BaseRepository[Categoria]):
         return len(
             self.session.exec(
                 select(Categoria).where(Categoria.eliminado_en == None)  # noqa: E711
+            ).all()
+        )
+
+    def get_subcategorias(self, padre_id: int) -> list[Categoria]:
+        """Devuelve los hijos directos activos de una categoría."""
+        return list(
+            self.session.exec(
+                select(Categoria)
+                .where(
+                    Categoria.padre_id == padre_id,
+                    Categoria.eliminado_en == None,  # noqa: E711
+                )
             ).all()
         )

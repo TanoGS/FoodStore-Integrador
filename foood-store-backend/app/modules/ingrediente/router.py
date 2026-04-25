@@ -81,3 +81,16 @@ def eliminar_ingrediente(
     svc: IngredienteService = Depends(get_ingrediente_service),
 ):
     return svc.eliminar_logicamente(id)
+
+
+@router.post(
+    "/{id}/restaurar",
+    response_model=IngredientePublic,
+    status_code=status.HTTP_200_OK,
+    summary="Restaurar ingrediente eliminado (revertir soft-delete)",
+)
+def restaurar_ingrediente(
+    id: int,
+    svc: IngredienteService = Depends(get_ingrediente_service),
+) -> IngredientePublic:
+    return svc.restaurar(id)
