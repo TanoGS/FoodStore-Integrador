@@ -1,41 +1,25 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { LoginPage } from './pages/login';
-import { HomePage } from './pages/home';
-import { RegisterPage } from './pages/register';
-import { ProtectedRoute } from './app/router/ProtectedRoute';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Layout from './components/layout/Layout';
+import Home from './pages/Home';
+import Catalogo from './pages/client/Catalogo';
 
-// Panel temporal
-const AdminTempDashboard = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <h1 className="text-4xl font-bold text-gray-800">¡Bienvenido al Panel de Administración!</h1>
-  </div>
-);
+// Componente placeholder para el catálogo temporal
+const CatalogoPlaceholder = () => <div className="p-10 text-center text-2xl font-bold">Catálogo en construcción 🚧</div>;
 
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Ruta principal (Catálogo Público) */}
-        <Route path="/" element={<HomePage />} />
-        
-        {/* Ruta de inicio de sesión */}
-        <Route path="/login" element={<LoginPage />} />
-
-        <Route path="/register" element={<RegisterPage />} />
-        
-        {/* Rutas del Admin */}
-        <Route path="/admin/*" element={<AdminTempDashboard />} />
-
-        {/* RUTAS PROTEGIDAS PARA EL ADMIN */}
-        <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
-          <Route path="/admin/*" element={<AdminTempDashboard />} />
+        {/* El Layout envuelve todas estas rutas */}
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Home />} />
+          
+          <Route path="carrito" element={<div className="p-10 text-center text-2xl">Carrito en construcción 🛒</div>} />
+          <Route path="login" element={<div className="p-10 text-center text-2xl">Login en construcción 🔐</div>} />
+          
+          <Route path="catalogo" element={<Catalogo />} />
         </Route>
-        
-        {/* Redirección por defecto */}
-        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
-
-export default App;
