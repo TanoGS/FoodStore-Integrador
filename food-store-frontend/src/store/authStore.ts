@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { axiosClient } from '../api/axios';
+import { axiosClient } from '../config/axios';
 
 interface AuthState {
   isAuthenticated: boolean;
