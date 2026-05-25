@@ -1,0 +1,86 @@
+backend: 
+1. Crear y activar el entorno virtual:
+python -m venv venv
+
+# En Windows:
+venv\Scripts\activate
+
+# En Mac/Linux:
+source venv/bin/activate
+
+2. Instalar las dependencias:
+pip install -r requirements.txt
+
+3. Crear .env:
+
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/foodstore_db"
+
+SECRET_KEY="una_contrasena_super_larga_y_dificil_de_adivinar_que_nadie_sepa_12345!"
+
+ - - - 
+
+ pip install fastapi uvicorn sqlmodel psycopg2-binary alembic "passlib[bcrypt]" "python-jose[cryptography]" "python-multipart"
+
+- - - 
+
+4. Crear las tablas en la Base de Datos:
+alembic upgrade head
+
+5. Encender el servidor:
+uvicorn main:app --reload 
+
+# (O uvicorn app.main:app --reload, dependiendo de dónde esté tu main.py)
+
+Frontend:
+npm install
+
+
+npm create vite@latest food-store-frontend -- --template react-ts
+cd food-store-frontend
+
+# 1. Dependencias principales de UI, Estado y Fetching
+npm install react-router-dom @tanstack/react-query @tanstack/react-form zustand axios recharts
+
+# 2. Tailwind CSS y sus dependencias (como dev dependencies)
+npm install -D tailwindcss postcss autoprefixer
+
+
+pip install "python-jose[cryptography]" "passlib[bcrypt]" python-multipart
+
+pip uninstall bcrypt -y
+pip install bcrypt==3.2.2
+
+Super Admin:
+admin@foodstore.com
+admin123
+
+Fase 1: Sacar la copia (Exportar en tu PC actual)
+Abre pgAdmin en tu computadora actual y conéctate a tu servidor local.
+
+Despliega la lista de bases de datos y busca la tuya (ej. food_store_db).
+
+Haz clic derecho sobre el nombre de tu base de datos y selecciona Backup... (Copia de seguridad).
+
+Se abrirá una ventana. En la pestaña General:
+
+Filename (Nombre de archivo): Haz clic en el ícono de la carpeta, elige dónde guardarlo 
+(por ejemplo, en tu Escritorio) y ponle un nombre como backup_food_store.sql o backup_food_store.tar.
+
+Format (Formato): Selecciona Custom (Personalizado) o Plain (Texto plano). Te recomiendo Custom porque es más fácil de restaurar.
+
+Fase 2: Cargar la copia (Importar en la PC nueva)
+Una vez que estés en la computadora nueva y hayas instalado PostgreSQL y pgAdmin (como vimos en la guía anterior):
+
+Abre pgAdmin en la PC nueva.
+
+Crea una base de datos vacía: Haz clic derecho en Databases -> Create -> Database... y llámala exactamente igual (food_store_db).
+
+Haz clic derecho sobre esa base de datos vacía que acabas de crear y selecciona Restore... (Restaurar).
+
+En la pestaña General:
+
+Format: Selecciona el mismo que usaste (Custom).
+
+Filename: Busca el archivo backup_food_store que trajiste desde tu otra PC. (Nota: a veces pgAdmin filtra por ciertas extensiones; si no ves tu archivo, cambia el filtro de formato de archivo en la ventana de búsqueda a "All Files").
+
+Haz clic en el botón Restore.

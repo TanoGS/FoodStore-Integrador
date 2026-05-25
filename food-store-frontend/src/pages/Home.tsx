@@ -1,0 +1,144 @@
+import { useState, useEffect } from 'react';
+import { ShoppingBag, Plus, Utensils } from 'lucide-react';
+import { CatalogoService } from '../services/catalogo.service'; 
+import { useCartStore } from '../store/cartStore';
+
+interface Producto {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+  precio: number; 
+  imagen_url?: string | null;
+  categorias?: any[];
+  activo?: boolean;
+}
+
+interface Categoria {
+  id: number;
+  nombre: string;
+  productos?: Producto[];
+}
+
+export default function Home() {
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [loading, setLoading] = useState(true);
+  const addItem = useCartStore(state => state.addItem);
+
+  useEffect(() => {
+    const fetchMenu = async () => {
+      try {
+       
+        const [cats, prods] = await Promise.all([
+          CatalogoService.getCategorias(),
+          CatalogoService.getProductos()
+        ]);
+
+        // Agrupamos los productos activos dentro de sus respectivas categorías
+        const menuAgrupado = cats.map((cat: any) => {
+          return {
+            ...cat,
+            productos: prods.filter((p: Producto) => 
+              p.activo && p.categorias?.some((c: any) => c.id === cat.id)
+            )
+          };
+        }).filter((cat: Categoria) => cat.productos && cat.productos.length > 0);
+
+        setCategorias(menuAgrupado);
+      } catch (error) {
+        console.error("Error al cargar el menú:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMenu();
+  }, []);
+
+  const handleAgregarAlCarrito = (producto: Producto, categoriaNombre: string) => {
+    addItem({
+      id: producto.id,
+      nombre: producto.nombre,
+      precio_base: producto.precio, 
+      imagen_url: producto.imagen_url || null,
+      categoria_nombre: categoriaNombre,
+      opciones_seleccionadas: [], 
+      subtotal: producto.precio
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      
+      {/* HERO SECTION */}
+      <div className="bg-slate-900 text-white py-20 px-4">
+        <div className="max-w-7xl mx-auto text-center">
+          <h1 className="text-4xl md:text-6xl font-black mb-6 tracking-tight">
+            El sabor que te <span className="text-orange-500">apasiona</span>,<br/>
+            directo a tu puerta.
+          </h1>
+          <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
+            Descubre nuestro menú renovado con los mejores ingredientes y calidad premium.
+          </p>
+        </div>
+      </div>
+
+      {/* MENÚ SECTION */}
+      <div className="max-w-7xl mx-auto px-4 py-16">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+            <p className="text-slate-500 font-medium">Preparando la cocina...</p>
+          </div>
+        ) : categorias.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
+            <ShoppingBag className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-slate-700">El menú está vacío</h3>
+            <p className="text-slate-500">Aún no hay productos disponibles para mostrar.</p>
+          </div>
+        ) : (
+          <div className="space-y-16">
+            {categorias.map((cat) => (
+              <section key={cat.id}>
+                <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                  <Utensils className="w-6 h-6 text-orange-600" />
+                  {cat.nombre}
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {cat.productos?.map((producto) => (
+                    <div key={producto.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all group flex flex-col">
+                      
+                      <div className="relative h-48 bg-slate-100 overflow-hidden">
+                        <img
+                          src={producto.imagen_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80'}
+                          alt={producto.nombre}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        />
+                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full font-black text-slate-900 shadow-sm">
+                          ${producto.precio}
+                        </div>
+                      </div>
+                      
+                      <div className="p-6 flex-1 flex flex-col">
+                        <h3 className="text-xl font-bold text-slate-800 mb-2">{producto.nombre}</h3>
+                        <p className="text-slate-500 text-sm line-clamp-2 mb-6 flex-1">
+                          {producto.descripcion || "Ingredientes frescos y sabor inigualable."}
+                        </p>
+                        <button
+                          onClick={() => handleAgregarAlCarrito(producto, cat.nombre)}
+                          className="w-full bg-slate-900 hover:bg-orange-600 text-white font-bold py-3 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-slate-200"
+                        >
+                          <Plus className="w-5 h-5" /> Agregar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,24 @@
+📦 src
+ ┣ 📂 assets/            # Imágenes estáticas, logos corporativos, etc.
+ ┣ 📂 components/        # Componentes visuales reutilizables
+ ┃ ┣ 📂 common/          # Botones genéricos, Inputs, Modals, Spinners
+ ┃ ┗ 📂 layout/          # Navbar, Footer, Layout principal, Sidebar del Admin
+ ┣ 📂 config/            # Configuraciones globales
+ ┃ ┗ 📜 api.ts           # Configuración de Axios/Fetch (URL base del backend)
+ ┣ 📂 hooks/             # Custom Hooks de React (ej: useAuth, useDebounce)
+ ┣ 📂 pages/             # Las vistas que corresponden a una ruta (URL)
+ ┃ ┣ 📂 admin/           # Dashboard, Gestión de Productos, Pedidos
+ ┃ ┣ 📂 auth/            # Login, Registro
+ ┃ ┗ 📂 client/          # Home, Catálogo público, Carrito, Checkout
+ ┣ 📂 services/          # Lógica pura para hablar con tu backend FastAPI
+ ┃ ┣ 📜 producto.service.ts
+ ┃ ┗ 📜 categoria.service.ts
+ ┣ 📂 store/             # Estado global con Zustand (Los 4 stores pedidos en el doc)
+ ┃ ┣ 📜 cartStore.ts     # Memoria del carrito de compras
+ ┃ ┗ 📜 authStore.ts     # Memoria del usuario logueado
+ ┣ 📂 types/             # Interfaces de TypeScript (El "espejo" de tus Schemas del backend)
+ ┃ ┣ 📜 producto.type.ts
+ ┃ ┗ 📜 categoria.type.ts
+ ┣ 📜 App.tsx            # Enrutador principal (React Router)
+ ┣ 📜 main.tsx           # Punto de entrada de React
+ ┗ 📜 vite-env.d.ts      # Tipos de Vite

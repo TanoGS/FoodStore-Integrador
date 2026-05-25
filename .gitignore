@@ -1,0 +1,19 @@
+# --- Frontend (Node/React) ---
+node_modules/
+dist/
+.env
+
+# --- Backend (Python/FastAPI) ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+alembic.ini
+*.sqlite3
+
+# --- OS y Editores ---
+.DS_Store
+.vscode/
+.idea/
