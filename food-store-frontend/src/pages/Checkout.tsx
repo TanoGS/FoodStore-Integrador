@@ -67,7 +67,7 @@ export default function Checkout() {
 
       // ¡Éxito! Limpiamos carrito y vamos a confirmación
       clearCart();
-      // Nota: Según tu guía, MercadoPago va al final. 
+      // Nota: MercadoPago va al final. 
       // Por ahora redirigimos a una página de éxito simple.
       navigate(`/pedido-exitoso/${pedidoCreado.id}`);
 

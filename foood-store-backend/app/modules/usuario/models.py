@@ -28,7 +28,7 @@ class UsuarioRol(SQLModel, table=True):
         sa_type=BigInteger,  
         nullable=True
     )
-    # 👈 CORREGIDO: Usamos DateTime con soporte de zona horaria
+    #  Usamos DateTime con soporte de zona horaria
     expires_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
 
     usuario: "Usuario" = Relationship(

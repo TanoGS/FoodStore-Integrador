@@ -11,21 +11,21 @@ from .models import EstadoPedido, FormaPago
 
 class ItemPedidoCreate(BaseModel):
     producto_id: int
-    cantidad:    int
+    cantidad: int
     # IDs de ingredientes que el cliente desea remover (solo es_removible=true)
     personalizacion: Optional[List[int]] = None
 
 
 class PedidoCreate(BaseModel):
-    direccion_id:      Optional[int] = None
+    direccion_id: Optional[int] = None
     forma_pago_codigo: str
-    notas:             Optional[str] = None
-    detalles:          List[ItemPedidoCreate]
+    notas: Optional[str] = None
+    detalles: List[ItemPedidoCreate]
 
 
 class AvanzarEstadoRequest(BaseModel):
     estado_hacia: EstadoPedido
-    motivo:       Optional[str] = None
+    motivo: Optional[str] = None
 
     @model_validator(mode="after")
     def motivo_requerido_si_cancela(self) -> "AvanzarEstadoRequest":
@@ -43,43 +43,53 @@ class CancelarPedidoRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 class DetallePedidoPublic(BaseModel):
-    producto_id:      int
-    cantidad:         int
-    nombre_snapshot:  str
-    precio_snapshot:  float
-    subtotal_snap:    float
-    personalizacion:  Optional[List[int]] = None
+    producto_id: int
+    cantidad: int
+    nombre_snapshot: str
+    precio_snapshot: float
+    subtotal_snap: float
+    personalizacion: Optional[List[int]] = None
 
     class Config:
         from_attributes = True
 
 
 class PedidoPublic(BaseModel):
-    id:                int
-    usuario_id:        int
-    direccion_id:      Optional[int]
-    estado_codigo:     str
+    id: int
+    usuario_id: int
+    direccion_id: Optional[int]
+    estado_codigo: str
     forma_pago_codigo: str
-    subtotal:          float
-    descuento:         float
-    costo_envio:       float
-    total:             float
-    notas:             Optional[str]
-    creado_en:         datetime
-    actualizado_en:    Optional[datetime]
-    detalles:          List[DetallePedidoPublic] = []
+    subtotal: float
+    descuento: float
+    costo_envio: float
+    total: float
+    notas: Optional[str]
+    creado_en: datetime
+    actualizado_en: Optional[datetime]
+    detalles: List[DetallePedidoPublic] = []
 
     class Config:
         from_attributes = True
 
 
 class HistorialEstadoPublic(BaseModel):
-    id:           int
+    id: int
     estado_desde: Optional[str]
     estado_hacia: str
-    usuario_id:   Optional[int]
-    motivo:       Optional[str]
-    creado_en:    datetime
+    usuario_id: Optional[int]
+    motivo: Optional[str]
+    creado_en: datetime
 
     class Config:
         from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Collection schemas
+# ---------------------------------------------------------------------------
+
+class PedidoList(BaseModel):
+    """Schema para respuestas paginadas de pedidos."""
+    data: List[PedidoPublic]
+    total: int

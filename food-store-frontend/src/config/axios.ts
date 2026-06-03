@@ -34,10 +34,10 @@ api.interceptors.request.use(
     
    if (token && config.headers) {
       // Le avisamos a la consola para auditar
-      console.log("🔑 [AXIOS] Enviando petición a:", config.url, "con token:", token.substring(0, 15) + "...");
+     // console.log("🔑 [AXIOS] Enviando petición a:", config.url, "con token:", token.substring(0, 15) + "...");
       config.headers.Authorization = `Bearer ${token}`;
     } else {
-      console.warn("⚠️ [AXIOS] CUIDADO: Haciendo petición SIN TOKEN a:", config.url);
+     // console.warn(" [AXIOS] CUIDADO: Haciendo petición SIN TOKEN a:", config.url);
     }
     return config;
   },

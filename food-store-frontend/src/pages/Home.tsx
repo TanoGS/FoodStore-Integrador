@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ShoppingBag, Plus, Utensils } from 'lucide-react';
 import { CatalogoService } from '../services/catalogo.service'; 
 import { useCartStore } from '../store/cartStore';
+import { useAuthStore } from '../store/authStore';
 
 interface Producto {
   id: number;
@@ -23,6 +24,7 @@ export default function Home() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const addItem = useCartStore(state => state.addItem);
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
 
   useEffect(() => {
     const fetchMenu = async () => {
@@ -124,12 +126,14 @@ export default function Home() {
                         <p className="text-slate-500 text-sm line-clamp-2 mb-6 flex-1">
                           {producto.descripcion || "Ingredientes frescos y sabor inigualable."}
                         </p>
-                        <button
-                          onClick={() => handleAgregarAlCarrito(producto, cat.nombre)}
-                          className="w-full bg-slate-900 hover:bg-orange-600 text-white font-bold py-3 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-slate-200"
-                        >
-                          <Plus className="w-5 h-5" /> Agregar
-                        </button>
+                        {isAuthenticated && (
+                          <button
+                            onClick={() => handleAgregarAlCarrito(producto, cat.nombre)}
+                            className="w-full bg-slate-900 hover:bg-orange-600 text-white font-bold py-3 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-slate-200"
+                          >
+                            <Plus className="w-5 h-5" /> Agregar
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

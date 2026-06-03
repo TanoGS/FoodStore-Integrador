@@ -11,7 +11,7 @@ class UsuarioRepository(BaseRepository[Usuario]):
         super().__init__(session, Usuario)
 
     def get_by_email(self, email: str) -> Optional[Usuario]:
-        # 👇 ACTUALIZADO: Trae el usuario, sus enlaces intermedios y el objeto Rol final en un solo viaje limpio a la BD
+        #  ACTUALIZADO: Trae el usuario, sus enlaces intermedios y el objeto Rol final en un solo viaje limpio a la BD
         statement = (
             select(Usuario)
             .where(Usuario.email == email, Usuario.eliminado_en == None)

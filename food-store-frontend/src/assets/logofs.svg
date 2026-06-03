@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150" width="100%" height="100%">
+  <rect width="100%" height="100%" fill="#0d1422" rx="15"/>
+  
+  <g font-family="'Arial Black', 'Impact', sans-serif" font-size="110" font-weight="900">
+    
+    <text x="25" y="120" fill="#FFFFFF">F</text>
+    
+    <text x="60" y="120" fill="#FF6600">S</text>
+    
+  </g>
+</svg>

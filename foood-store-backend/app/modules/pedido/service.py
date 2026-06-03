@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from .models import (
@@ -11,7 +10,12 @@ from .models import (
     DetallePedido,
     Pedido,
 )
-from .schemas import AvanzarEstadoRequest, PedidoCreate
+from .schemas import (
+    AvanzarEstadoRequest,
+    PedidoCreate,
+    PedidoPublic,
+    HistorialEstadoPublic,
+)
 from .unit_of_work import PedidoUnitOfWork
 from app.modules.catalogo.producto.models import Producto
 
@@ -36,243 +40,295 @@ class PedidoService:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    # -----------------------------------------------------------------------
-    # Crear pedido — transacción atómica (Unit of Work manual)
-    # -----------------------------------------------------------------------
-    def crear_pedido(self, usuario_id: int, datos: PedidoCreate) -> Pedido:
-        subtotal = 0.0
-        detalles: list[DetallePedido] = []
+    # ====================================================================
+    # 1. CREAR PEDIDO — TRANSACCIÓN ATÓMICA CON UNIT OF WORK
+    # ====================================================================
+    def crear_pedido(self, usuario_id: int, datos: PedidoCreate) -> PedidoPublic:
+        with PedidoUnitOfWork(self._session) as uow:
+            # 1. Validar productos y construir snapshots (precio + nombre congelados)
+            detalles: List[DetallePedido] = []
+            subtotal = 0.0
 
-        # 1. Validar productos y construir snapshots (precio + nombre congelados)
-        for item in datos.detalles:
-            producto = self._session.get(Producto, item.producto_id)
-            if not producto or not producto.activo:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Producto {item.producto_id} no disponible.",
+            for item in datos.detalles:
+                producto = self._session.get(Producto, item.producto_id)
+                if not producto or not producto.activo:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Producto {item.producto_id} no disponible.",
+                    )
+                
+                precio = float(producto.precio)
+                sub = round(precio * item.cantidad, 2)
+                subtotal += sub
+
+                detalles.append(
+                    DetallePedido(
+                        producto_id=item.producto_id,
+                        cantidad=item.cantidad,
+                        nombre_snapshot=producto.nombre,
+                        precio_snapshot=precio,
+                        subtotal_snap=sub,
+                        personalizacion=item.personalizacion,
+                    )
                 )
-            precio = float(producto.precio)
-            sub    = round(precio * item.cantidad, 2)
-            subtotal += sub
-            detalles.append(
-                DetallePedido(
-                    producto_id=item.producto_id,
-                    cantidad=item.cantidad,
-                    nombre_snapshot=producto.nombre,
-                    precio_snapshot=precio,
-                    subtotal_snap=sub,
-                    personalizacion=item.personalizacion,
-                )
+
+            # 2. Calcular totales
+            descuento = 0.0
+            costo_envio = 50.0
+            total = round(subtotal - descuento + costo_envio, 2)
+
+            # 3. Crear el pedido
+            pedido = Pedido(
+                usuario_id=usuario_id,
+                direccion_id=datos.direccion_id,
+                estado_codigo=EstadoPedido.PENDIENTE,
+                forma_pago_codigo=datos.forma_pago_codigo,
+                subtotal=subtotal,
+                descuento=descuento,
+                costo_envio=costo_envio,
+                total=total,
+                notas=datos.notas,
             )
 
-        descuento   = 0.0
-        costo_envio = 50.0
-        total       = round(subtotal - descuento + costo_envio, 2)
+            uow.pedidos.add(pedido)
 
-        pedido = Pedido(
-            usuario_id=usuario_id,
-            direccion_id=datos.direccion_id,
-            estado_codigo=EstadoPedido.PENDIENTE,
-            forma_pago_codigo=datos.forma_pago_codigo,
-            subtotal=subtotal,
-            descuento=descuento,
-            costo_envio=costo_envio,
-            total=total,
-            notas=datos.notas,
-        )
-
-        uow = PedidoUnitOfWork(self._session)
-        try:
-            # 2. Flush para obtener pedido.id antes del commit
-            self._session.add(pedido)
-            self._session.flush()
-
-            # 3. Persistir detalles con FK al pedido ya creado
+            # 4. Asignar FK y persistir detalles
             for d in detalles:
                 d.pedido_id = pedido.id
-                self._session.add(d)
+            uow.pedidos.add_many_detalles(detalles)
 
-            # 4. Audit Trail — primer registro (RN-02: estado_desde = NULL)
-            self._session.add(
-                HistorialEstadoPedido(
-                    pedido_id=pedido.id,
-                    estado_desde=None,
-                    estado_hacia=EstadoPedido.PENDIENTE,
-                    usuario_id=usuario_id,
-                    motivo="Creación del pedido",
-                )
+            # 5. Audit Trail — primer registro (RN-02: estado_desde = NULL)
+            historial = HistorialEstadoPedido(
+                pedido_id=pedido.id,
+                estado_desde=None,
+                estado_hacia=EstadoPedido.PENDIENTE,
+                usuario_id=usuario_id,
+                motivo="Creación del pedido",
             )
+            uow.pedidos.add_historial(historial)
 
-            uow.commit()
+            # 6. Refrescar y retornar
+            self._session.flush()
             self._session.refresh(pedido)
-            return pedido
+            return PedidoPublic.model_validate(pedido)
 
-        except Exception:
-            uow.rollback()
-            raise
-
-    # -----------------------------------------------------------------------
-    # Avanzar estado — solo ADMIN / GESTOR_PEDIDOS
-    # Validación FSM en la capa de servicio, nunca en el router
-    # -----------------------------------------------------------------------
+    # ====================================================================
+    # 2. AVANZAR ESTADO — SOLO ADMIN / GESTOR_PEDIDOS
+    # ====================================================================
     def avanzar_estado(
         self,
         pedido_id: int,
         datos: AvanzarEstadoRequest,
         actor_id: int,
-    ) -> Pedido:
-        pedido = self._get_o_404(pedido_id)
-        estado_actual = pedido.estado_codigo
-        estado_nuevo  = datos.estado_hacia.value
-
-        # Validar transición en el mapa FSM
-        permitidos = [e.value for e in _FSM.get(estado_actual, [])]
-        if estado_nuevo not in permitidos:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Transición inválida: {estado_actual} → {estado_nuevo}.",
-            )
-
-        # RN-05: motivo obligatorio al cancelar
-        if estado_nuevo == EstadoPedido.CANCELADO and not datos.motivo:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="El motivo es obligatorio al cancelar.",
-            )
-
-        uow = PedidoUnitOfWork(self._session)
-        try:
-            pedido.estado_codigo  = estado_nuevo
-            pedido.actualizado_en = datetime.now(timezone.utc)
-            self._session.add(pedido)
-            self._session.add(
-                HistorialEstadoPedido(
-                    pedido_id=pedido.id,
-                    estado_desde=estado_actual,
-                    estado_hacia=estado_nuevo,
-                    usuario_id=actor_id,
-                    motivo=datos.motivo,
+    ) -> PedidoPublic:
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = uow.pedidos.get_by_id_with_details(pedido_id)
+            if not pedido:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Pedido {pedido_id} no encontrado.",
                 )
+
+            estado_actual = pedido.estado_codigo
+            estado_nuevo = datos.estado_hacia.value
+
+            # Validar transición FSM
+            permitidos = [e.value for e in _FSM.get(estado_actual, [])]
+            if estado_nuevo not in permitidos:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Transición inválida: {estado_actual} → {estado_nuevo}.",
+                )
+
+            # RN-05: motivo obligatorio al cancelar
+            if estado_nuevo == EstadoPedido.CANCELADO.value and not datos.motivo:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="El motivo es obligatorio al cancelar.",
+                )
+
+            # Actualizar estado y persistir
+            pedido.estado_codigo = estado_nuevo
+            pedido.actualizado_en = datetime.now(timezone.utc)
+            uow.pedidos.add(pedido)
+
+            # Registrar en historial
+            historial = HistorialEstadoPedido(
+                pedido_id=pedido.id,
+                estado_desde=estado_actual,
+                estado_hacia=estado_nuevo,
+                usuario_id=actor_id,
+                motivo=datos.motivo,
             )
-            uow.commit()
+            uow.pedidos.add_historial(historial)
+
+            self._session.flush()
             self._session.refresh(pedido)
-            return pedido
+            return PedidoPublic.model_validate(pedido)
 
-        except Exception:
-            uow.rollback()
-            raise
-
-    # -----------------------------------------------------------------------
-    # Cancelar pedido — disponible al propio cliente (restricción de estado)
-    # -----------------------------------------------------------------------
+    # ====================================================================
+    # 3. CANCELAR PEDIDO — CLIENTE O STAFF
+    # ====================================================================
     def cancelar_pedido(
         self,
         pedido_id: int,
         motivo: str,
         usuario_id: int,
-        roles: list[str],
-    ) -> Pedido:
-        pedido = self._get_o_404(pedido_id)
-
-        es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
-
-        # Verificar propiedad del pedido para clientes
-        if not es_privilegiado and pedido.usuario_id != usuario_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para cancelar este pedido.",
-            )
-
-        estado_actual = pedido.estado_codigo
-
-        # Clientes solo pueden cancelar desde PENDIENTE o CONFIRMADO
-        if not es_privilegiado and estado_actual not in {e.value for e in _CANCELACION_CLIENTE}:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Solo puedes cancelar desde PENDIENTE o CONFIRMADO. Estado actual: {estado_actual}.",
-            )
-
-        # Verificar que el FSM permite cancelar desde este estado
-        if EstadoPedido.CANCELADO.value not in [e.value for e in _FSM.get(estado_actual, [])]:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"No se puede cancelar desde el estado {estado_actual}.",
-            )
-
-        uow = PedidoUnitOfWork(self._session)
-        try:
-            pedido.estado_codigo  = EstadoPedido.CANCELADO
-            pedido.actualizado_en = datetime.now(timezone.utc)
-            self._session.add(pedido)
-            self._session.add(
-                HistorialEstadoPedido(
-                    pedido_id=pedido.id,
-                    estado_desde=estado_actual,
-                    estado_hacia=EstadoPedido.CANCELADO,
-                    usuario_id=usuario_id,
-                    motivo=motivo,
+        roles: List[str],
+    ) -> PedidoPublic:
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = uow.pedidos.get_by_id_with_details(pedido_id)
+            if not pedido:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Pedido {pedido_id} no encontrado.",
                 )
+
+            es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
+
+            # Verificar propiedad del pedido para clientes
+            if not es_privilegiado and pedido.usuario_id != usuario_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes permiso para cancelar este pedido.",
+                )
+
+            estado_actual = pedido.estado_codigo
+
+            # Clientes solo pueden cancelar desde PENDIENTE o CONFIRMADO
+            if not es_privilegiado:
+                estados_cancelables = {e.value for e in _CANCELACION_CLIENTE}
+                if estado_actual not in estados_cancelables:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Solo puedes cancelar desde PENDIENTE o CONFIRMADO. Estado actual: {estado_actual}.",
+                    )
+
+            # Verificar que el FSM permite cancelar desde este estado
+            if EstadoPedido.CANCELADO.value not in [e.value for e in _FSM.get(estado_actual, [])]:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"No se puede cancelar desde el estado {estado_actual}.",
+                )
+
+            # Actualizar estado
+            pedido.estado_codigo = EstadoPedido.CANCELADO
+            pedido.actualizado_en = datetime.now(timezone.utc)
+            uow.pedidos.add(pedido)
+
+            # Registrar historial
+            historial = HistorialEstadoPedido(
+                pedido_id=pedido.id,
+                estado_desde=estado_actual,
+                estado_hacia=EstadoPedido.CANCELADO,
+                usuario_id=usuario_id,
+                motivo=motivo,
             )
-            uow.commit()
+            uow.pedidos.add_historial(historial)
+
+            self._session.flush()
             self._session.refresh(pedido)
-            return pedido
+            return PedidoPublic.model_validate(pedido)
 
-        except Exception:
-            uow.rollback()
-            raise
+    # ====================================================================
+    # 4. LISTAR PEDIDOS — PAGINADO
+    # ====================================================================
+    def listar_pedidos(
+        self,
+        usuario_id: int,
+        roles: List[str],
+        offset: int = 0,
+        limit: int = 20,
+        estado: Optional[str] = None,
+    ):
+        with PedidoUnitOfWork(self._session) as uow:
+            es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
 
-    # -----------------------------------------------------------------------
-    # Listado — CLIENT ve solo sus pedidos; ADMIN/GESTOR_PEDIDOS ven todos
-    # -----------------------------------------------------------------------
-    def listar_pedidos(self, usuario_id: int, roles: list[str]) -> List[Pedido]:
-        stmt = (
-            select(Pedido)
-            .options(selectinload(Pedido.detalles))
-        )
-        if not any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS")):
-            stmt = stmt.where(Pedido.usuario_id == usuario_id)
-        stmt = stmt.order_by(Pedido.creado_en.desc())
-        return list(self._session.exec(stmt).all())
+            if es_privilegiado:
+                if estado:
+                    pedidos_orm = uow.pedidos.get_all_activos_por_estado(estado, offset, limit)
+                    total = uow.pedidos.count_activos_por_estado(estado)
+                else:
+                    pedidos_orm = uow.pedidos.get_all_activos(offset, limit)
+                    total = uow.pedidos.count_activos()
+            else:
+                pedidos_orm = uow.pedidos.get_all_activos_por_usuario(usuario_id, offset, limit)
+                total = uow.pedidos.count_activos_por_usuario(usuario_id)
 
-    # -----------------------------------------------------------------------
-    # Obtener pedido individual con control de acceso
-    # -----------------------------------------------------------------------
-    def obtener_pedido(self, pedido_id: int, usuario_id: int, roles: list[str]) -> Pedido:
-        pedido = self._get_o_404(pedido_id)
-        es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
-        if not es_privilegiado and pedido.usuario_id != usuario_id:
+            pedidos_pydantic = [PedidoPublic.model_validate(p) for p in pedidos_orm]
+            return {"data": pedidos_pydantic, "total": total}
+
+    # ====================================================================
+    # 5. OBTENER PEDIDO INDIVIDUAL
+    # ====================================================================
+    def obtener_pedido(
+        self,
+        pedido_id: int,
+        usuario_id: int,
+        roles: List[str],
+    ) -> PedidoPublic:
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = uow.pedidos.get_by_id_with_details(pedido_id)
+            if not pedido:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Pedido {pedido_id} no encontrado.",
+                )
+
+            es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
+            if not es_privilegiado and pedido.usuario_id != usuario_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes permiso para ver este pedido.",
+                )
+
+            return PedidoPublic.model_validate(pedido)
+
+    # ====================================================================
+    # 6. OBTENER HISTORIAL DE UN PEDIDO
+    # ====================================================================
+    def obtener_historial(
+        self,
+        pedido_id: int,
+        usuario_id: int,
+        roles: List[str],
+    ) -> List[HistorialEstadoPublic]:
+        # Primero verificamos acceso al pedido
+        self.obtener_pedido(pedido_id, usuario_id, roles)
+
+        with PedidoUnitOfWork(self._session) as uow:
+            historiales = uow.pedidos.get_historial_by_pedido(pedido_id)
+            return [HistorialEstadoPublic.model_validate(h) for h in historiales]
+
+    # ====================================================================
+    # 7. LISTAR TODOS PARA GESTIÓN (ADMIN)
+    # ====================================================================
+    def obtener_todos_los_pedidos(self, offset: int = 0, limit: int = 20):
+        """Obtiene todos los pedidos para panel de administración."""
+        with PedidoUnitOfWork(self._session) as uow:
+            pedidos_orm = uow.pedidos.get_all_incluyendo_eliminados(offset, limit)
+            total = uow.pedidos.count_total()
+            pedidos_pydantic = [PedidoPublic.model_validate(p) for p in pedidos_orm]
+            return {"data": pedidos_pydantic, "total": total}
+
+    # ====================================================================
+    # 8. MÉTODOS DE UTILIDAD (INTERNOS)
+    # ====================================================================
+    def _es_staff(self, roles: List[str]) -> bool:
+        """Helper para verificar si el usuario tiene rol de staff."""
+        return any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
+
+    def _verificar_acceso_pedido(
+        self,
+        pedido: Pedido,
+        usuario_id: int,
+        roles: List[str],
+    ) -> None:
+        """Verifica que el usuario tenga acceso al pedido."""
+        if self._es_staff(roles):
+            return
+        if pedido.usuario_id != usuario_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para ver este pedido.",
+                detail="No tienes permiso para acceder a este pedido.",
             )
-        return pedido
-
-    # -----------------------------------------------------------------------
-    # Historial de transiciones ordenado por fecha (RN-03)
-    # -----------------------------------------------------------------------
-    def obtener_historial(
-        self, pedido_id: int, usuario_id: int, roles: list[str]
-    ) -> List[HistorialEstadoPedido]:
-        pedido = self.obtener_pedido(pedido_id, usuario_id, roles)
-        stmt = (
-            select(HistorialEstadoPedido)
-            .where(HistorialEstadoPedido.pedido_id == pedido.id)
-            .order_by(HistorialEstadoPedido.creado_en.asc())
-        )
-        return list(self._session.exec(stmt).all())
-
-    # -----------------------------------------------------------------------
-    # Helper privado
-    # -----------------------------------------------------------------------
-    def _get_o_404(self, pedido_id: int) -> Pedido:
-        pedido = self._session.exec(
-            select(Pedido)
-            .options(selectinload(Pedido.detalles))
-            .where(Pedido.id == pedido_id)
-        ).first()
-        if not pedido:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Pedido {pedido_id} no encontrado.",
-            )
-        return pedido

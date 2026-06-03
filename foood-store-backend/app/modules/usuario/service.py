@@ -51,7 +51,7 @@ class UsuarioService:
     # ====================================================================
     # 2. AUTENTICACIÓN STATELESS CON COOKIES HTTPONLY
     # ====================================================================
-    def login(self, email: str, password_plana: str, response: Response) -> dict: # 👈 Cambiamos retorno a dict
+    def login(self, email: str, password_plana: str, response: Response) -> dict: #  Cambiamos retorno a dict
         with UsuarioUnitOfWork(self._session) as uow:
             usuario = uow.usuarios.get_by_email(email)
             if not usuario or not verify_password(password_plana, usuario.password):

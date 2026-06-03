@@ -49,7 +49,7 @@ class UsuarioPublic(UsuarioBase):
     class Config:
         from_attributes = True
 
-    #  EL INTERCEPTOR MAGNÍFICO (Model Validator) 
+    #  EL INTERCEPTOR (Model Validator) 
     @model_validator(mode="before")
     @classmethod
     def aplanar_roles_enlaces(cls, data):
