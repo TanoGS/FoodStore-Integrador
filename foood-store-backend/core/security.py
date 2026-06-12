@@ -98,10 +98,12 @@ class TokenData(BaseModel):
     roles: List[str]
     permisos: List[str] = []
 
-def get_current_user_token(token: str = Depends(oauth2_scheme)) -> TokenData:
+def decode_access_token(token: str) -> TokenData:
     """
-    Desencripta el token que extrajo nuestro guardia y devuelve los datos del usuario.
-    Úsalo en tus rutas así: (current_user = Depends(get_current_user_token))
+    Decodifica un JWT raw y devuelve los datos del usuario.
+    Helper reutilizable para endpoints que no reciben el token vía Depends
+    (p. ej. WebSockets, donde el token viene como query param).
+    Levanta HTTPException(401) si el token es inválido o está expirado.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -113,14 +115,22 @@ def get_current_user_token(token: str = Depends(oauth2_scheme)) -> TokenData:
         user_id: str = payload.get("sub")
         roles: List[str] = payload.get("roles", [])
         permisos: List[str] = payload.get("permisos", [])
-        
+
         if user_id is None:
             raise credentials_exception
-            
+
         return TokenData(id=user_id, roles=roles, permisos=permisos)
-        
+
     except JWTError:
         raise credentials_exception
+
+
+def get_current_user_token(token: str = Depends(oauth2_scheme)) -> TokenData:
+    """
+    Desencripta el token que extrajo nuestro guardia y devuelve los datos del usuario.
+    Úsalo en tus rutas así: (current_user = Depends(get_current_user_token))
+    """
+    return decode_access_token(token)
     
     
 class RoleChecker:

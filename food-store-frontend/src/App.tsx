@@ -1,9 +1,11 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Home from './pages/Home';
 
 import Login from './pages/auth/Login';
 import AdminLayout from './components/layout/AdminLayout';
+import Dashboard from './pages/admin/Dashboard';
 import ProductosAdmin from './pages/admin/ProductosAdmin';
 import CategoriasAdmin from './pages/admin/CategoriasAdmin';
 import IngredientesAdmin from './pages/admin/IngredientesAdmin';
@@ -11,13 +13,44 @@ import PanelUsuarios from './pages/admin/PanelUsuarios';
 import Register from './pages/auth/Register';
 import MisDirecciones from './pages/direcciones/MisDirecciones';
 import GestorPedidos from './pages/admin/GestorPedidos';
+import VistaCocina   from './pages/admin/VistaCocina';
+import VistaCajero   from './pages/admin/VistaCajero';
 import Checkout from './pages/Checkout';
 import PedidoExitoso from './pages/PedidoExitoso';
 import MisPedidos from './pages/client/MisPedidos';
 import MiPerfil   from './pages/client/MiPerfil';
 import { ProtectedRoute } from './app/router/ProtectedRoute';
+import { useAuthStore } from './store/authStore';
 
-const ADMIN_ROLES = ['ADMIN', 'GESTOR_STOCK', 'GESTOR_PEDIDOS'];
+const ADMIN_ROLES = ['ADMIN', 'GESTOR_STOCK', 'GESTOR_PEDIDOS', 'COCINA', 'CAJERO'];
+
+/**
+ * Redirige según el rol principal del usuario cuando entra a /admin:
+ *  - COCINA  → /admin/cocina   (KDS directo)
+ *  - CAJERO  → /admin/cajero   (Caja directo)
+ *  - ADMIN / GESTOR_* → se queda en el Dashboard con gráficos
+ */
+function AdminIndexRedirect() {
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const roles = (user?.roles ?? []).map((r: any) => r.codigo || r.rol_codigo);
+
+    // Roles operativos → van directo a su vista
+    if (roles.includes('COCINA')) {
+      navigate('/admin/cocina', { replace: true });
+      return;
+    }
+    if (roles.includes('CAJERO')) {
+      navigate('/admin/cajero', { replace: true });
+      return;
+    }
+  }, [user, navigate]);
+
+  // Staff de gestión → Dashboard con KPIs y gráficos
+  return <Dashboard />;
+}
 
 export default function App() {
   return (
@@ -42,11 +75,13 @@ export default function App() {
         {/* --- RUTAS PROTEGIDAS (Admin / Gestor) --- */}
         <Route element={<ProtectedRoute allowedRoles={ADMIN_ROLES} />}>
           <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<div className="text-2xl font-bold">Bienvenido al Dashboard de Gestión</div>} />
+            <Route index element={<AdminIndexRedirect />} />
             <Route path="productos" element={<ProductosAdmin />} />
             <Route path="categorias" element={<CategoriasAdmin />} />
             <Route path="ingredientes" element={<IngredientesAdmin />} />
-            <Route path="gestor-pedidos" element={<GestorPedidos />} />
+            <Route path="pedidos" element={<GestorPedidos />} />
+            <Route path="cocina"  element={<VistaCocina />} />
+            <Route path="cajero"  element={<VistaCajero />} />
             <Route path="usuarios" element={<PanelUsuarios />} />
           </Route>
         </Route>

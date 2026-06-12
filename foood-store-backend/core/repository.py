@@ -6,14 +6,8 @@ ModelT = TypeVar("ModelT", bound=SQLModel)
 
 class BaseRepository(Generic[ModelT]):
     """
-    Repositorio genérico que implementa operaciones CRUD básicas
-    para cualquier modelo basado en SQLModel.
-
-    Principio: el repositorio solo habla con la DB.
-    No contiene lógica de negocio ni levanta HTTPException.
-
-    Este repositorio sirve como clase base para repositorios específicos,
-    donde se agregan queries más complejas o reglas de acceso particulares.
+    Repositorio que implementa operaciones CRUD básicas
+   
     """
 
     def __init__(self, session: Session, model: Type[ModelT]) -> None:

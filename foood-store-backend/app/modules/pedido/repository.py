@@ -122,6 +122,77 @@ class PedidoRepository(BaseRepository[Pedido]):
         return self.session.exec(statement).one()
 
     # ====================================================================
+    # 5b. LISTAR TODOS CON FILTRO DE PERÍODO (para GestorPedidos staff)
+    # ====================================================================
+    def get_all_incluyendo_eliminados_por_periodo(
+        self,
+        periodo: Optional[str],
+        offset: int = 0,
+        limit: int = 20,
+    ) -> List[Pedido]:
+        """
+        Lista pedidos filtrados por período para el panel de gestión de staff.
+        Incluye detalles cargados eagerly.
+        - None o 'TODOS': sin filtro de fecha
+        - 'DIARIO': pedidos de hoy (00:00 a 23:59)
+        - 'MENSUAL': pedidos del mes actual (1° al último día)
+
+        Usa comparación de datetime naive (compatible con SQLite y PostgreSQL)
+        en vez de func.date() que puede fallar en algunos dialectos.
+        """
+        statement = select(Pedido).offset(offset).limit(limit).options(
+            selectinload(Pedido.detalles)
+        ).order_by(Pedido.creado_en.desc())
+
+        if periodo == 'DIARIO':
+            from datetime import date, datetime as dt
+            today_start = dt.combine(date.today(), dt.min.time())
+            today_end   = dt.combine(date.today(), dt.max.time())
+            statement = statement.where(
+                Pedido.creado_en >= today_start,
+                Pedido.creado_en <= today_end,
+            )
+        elif periodo == 'MENSUAL':
+            from datetime import date, datetime as dt
+            today = date.today()
+            first = dt.combine(date(today.year, today.month, 1), dt.min.time())
+            if today.month == 12:
+                last = dt.combine(date(today.year + 1, 1, 1), dt.min.time())
+            else:
+                last = dt.combine(date(today.year, today.month + 1, 1), dt.min.time())
+            statement = statement.where(
+                Pedido.creado_en >= first,
+                Pedido.creado_en < last,
+            )
+
+        return list(self.session.exec(statement).all())
+
+    def count_total_por_periodo(self, periodo: Optional[str]) -> int:
+        """Cuenta pedidos filtrados por período."""
+        statement = select(func.count(Pedido.id))
+        if periodo == 'DIARIO':
+            from datetime import date, datetime as dt
+            today_start = dt.combine(date.today(), dt.min.time())
+            today_end   = dt.combine(date.today(), dt.max.time())
+            statement = statement.where(
+                Pedido.creado_en >= today_start,
+                Pedido.creado_en <= today_end,
+            )
+        elif periodo == 'MENSUAL':
+            from datetime import date, datetime as dt
+            today = date.today()
+            first = dt.combine(date(today.year, today.month, 1), dt.min.time())
+            if today.month == 12:
+                last = dt.combine(date(today.year + 1, 1, 1), dt.min.time())
+            else:
+                last = dt.combine(date(today.year, today.month + 1, 1), dt.min.time())
+            statement = statement.where(
+                Pedido.creado_en >= first,
+                Pedido.creado_en < last,
+            )
+        return self.session.exec(statement).one()
+
+    # ====================================================================
     # 6. HISTORIAL DE ESTADOS
     # ====================================================================
     def get_historial_by_pedido(

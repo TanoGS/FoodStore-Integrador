@@ -222,22 +222,22 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
 
   if (loadingDatos) {
     return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-2xl shadow-xl flex items-center gap-3">
+      <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div className="bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-3">
           <div className="animate-spin h-5 w-5 border-2 border-orange-600 border-t-transparent rounded-full"></div>
-          <span className="font-bold text-slate-700">Cargando base de datos...</span>
+          <span className="font-bold text-white">Cargando base de datos...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[min(95vw,1344px)] max-h-[95vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-[min(95vw,1344px)] max-h-[95vh] flex flex-col overflow-hidden border border-slate-700">
 
         {/* Cabecera */}
-        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-slate-900 text-white shrink-0">
-          <h3 className="font-black text-xl">
+        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-700 shrink-0">
+          <h3 className="font-black text-xl text-white">
             {productoEditar ? 'Modificar Plato y Receta' : 'Creación de Nuevo Plato'}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-red-400 transition-colors">
@@ -246,49 +246,49 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
         </div>
 
         {/* Cuerpo Scrollable */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-900">
           <form id="product-form" onSubmit={handleSubmit} className="space-y-8">
 
             {/* SECCIÓN 1: Info Básica */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <h4 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">1. Identidad del Plato</h4>
+            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+              <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">1. Identidad del Plato</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Nombre Comercial *</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nombre Comercial *</label>
                   <input
                     type="text" required value={nombre}
                     onChange={e => setNombre(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white focus:ring-2 focus:ring-orange-500 outline-none placeholder-slate-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Stock Fijo (Opcional)</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Stock Fijo (Opcional)</label>
                   <input
                     type="number" value={stock}
                     onChange={e => setStock(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white focus:ring-2 focus:ring-orange-500 outline-none"
                     placeholder="Dejar vacío si es ilimitado"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">URL de Imagen (Opcional)</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">URL de Imagen (Opcional)</label>
                   <input
                     type="url" value={imagenUrl}
                     onChange={e => setImagenUrl(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white focus:ring-2 focus:ring-orange-500 outline-none placeholder-slate-400"
                     placeholder="https://..."
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Descripción</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Descripción</label>
                   <input
                     type="text" value={descripcion}
                     onChange={e => setDescripcion(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white focus:ring-2 focus:ring-orange-500 outline-none"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Categoría del Menú *</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Categoría del Menú *</label>
                   <div className="flex flex-wrap gap-2">
                     {categoriasDB.map(cat => (
                       <button
@@ -296,8 +296,8 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                         onClick={() => setCategoriaId(cat.id)}
                         className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all border ${
                           categoriaId === cat.id
-                            ? 'bg-orange-100 border-orange-500 text-orange-700 shadow-sm'
-                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                            ? 'bg-orange-900/40 border-orange-500 text-orange-400'
+                            : 'bg-slate-700 border-slate-600 text-slate-400 hover:border-slate-500'
                         }`}
                       >
                         {cat.nombre}
@@ -309,8 +309,8 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
             </div>
 
             {/* SECCIÓN 2: ESCANDALLO */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <h4 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">2. Hoja de Receta (Escandallo)</h4>
+            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+              <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">2. Hoja de Receta (Escandallo)</h4>
 
               {/* Filtro */}
               <div className="relative mb-4">
@@ -320,25 +320,25 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                   placeholder="Filtrar ingredientes por nombre..."
                   value={filtroIng}
                   onChange={e => setFiltroIng(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm"
+                  className="w-full pl-9 pr-4 py-2.5 bg-slate-700 border border-slate-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm text-white placeholder-slate-400"
                 />
               </div>
 
               {/* Tabla */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <div className="overflow-x-auto rounded-xl border border-slate-700">
                 <table className="w-full text-sm text-left">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-black uppercase">
+                    <tr className="bg-slate-900/80 border-b border-slate-700 text-slate-400 text-xs font-bold uppercase">
                       <th className="px-4 py-3">Nombre</th>
                       <th className="px-4 py-3 w-44">Cantidad usada</th>
                       <th className="px-4 py-3 w-48 text-center">Cliente puede quitarlo</th>
                       <th className="px-4 py-3 w-24 text-center">Agregar</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-700">
                     {ingsPaginados.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                        <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
                           No se encontraron ingredientes.
                         </td>
                       </tr>
@@ -347,10 +347,10 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                       const esUnidad = ing.unidad_medida?.toUpperCase() === 'UNIDAD';
                       const invalid  = cfg.agregado && (cfg.cantidad === '' || Number(cfg.cantidad) <= 0);
                       return (
-                        <tr key={ing.id} className={cfg.agregado ? 'bg-orange-50' : 'hover:bg-slate-50'}>
+                        <tr key={ing.id} className={cfg.agregado ? 'bg-orange-900/20' : 'hover:bg-slate-700/30'}>
                           <td className="px-4 py-3">
-                            <span className="font-bold text-slate-800">{ing.nombre}</span>
-                            <span className="ml-2 text-xs text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                            <span className="font-bold text-white">{ing.nombre}</span>
+                            <span className="ml-2 text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded font-medium">
                               {ing.unidad_medida}
                             </span>
                           </td>
@@ -364,8 +364,8 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                               placeholder={esUnidad ? '1' : '0.000'}
                               className={`w-full px-2 py-1.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400 ${
                                 invalid
-                                  ? 'border-red-300 bg-red-50'
-                                  : 'border-slate-200 bg-white'
+                                  ? 'border-red-500 bg-red-900/20 text-red-300'
+                                  : 'border-slate-600 bg-slate-700 text-white'
                               }`}
                             />
                           </td>
@@ -374,7 +374,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                               type="checkbox"
                               checked={cfg.es_removible}
                               onChange={e => setCfg(ing.id, { es_removible: e.target.checked })}
-                              className="w-4 h-4 accent-orange-600 cursor-pointer"
+                              className="w-4 h-4 accent-orange-500 cursor-pointer"
                             />
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -382,7 +382,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                               type="checkbox"
                               checked={cfg.agregado}
                               onChange={e => setCfg(ing.id, { agregado: e.target.checked })}
-                              className="w-4 h-4 accent-orange-600 cursor-pointer"
+                              className="w-4 h-4 accent-orange-500 cursor-pointer"
                             />
                           </td>
                         </tr>
@@ -394,7 +394,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
 
               {/* Paginación */}
               <div className="flex items-center justify-between mt-3">
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400">
                   {ingsFiltrados.length} ingredientes · Página {pagIng} de {totalPagsIng}
                 </span>
                 <div className="flex items-center gap-1">
@@ -402,7 +402,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                     type="button"
                     onClick={() => setPagIng(p => Math.max(1, p - 1))}
                     disabled={pagIng === 1}
-                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="p-1.5 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -410,7 +410,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                     type="button"
                     onClick={() => setPagIng(p => Math.min(totalPagsIng, p + 1))}
                     disabled={pagIng === totalPagsIng}
-                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="p-1.5 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -419,12 +419,12 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
             </div>
 
             {/* SECCIÓN 3: FINANZAS */}
-            <div className="bg-slate-900 p-6 rounded-2xl shadow-sm text-white">
-              <h4 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-white">
+              <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Calculator className="w-4 h-4" /> 3. Proyección Financiera
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
                   <div className="text-slate-400 text-xs font-bold mb-1">COSTO DE PRODUCCIÓN</div>
                   <div className="text-2xl font-black text-white">${costoTotalProduccion.toFixed(2)}</div>
                 </div>
@@ -445,13 +445,13 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                     <input
                       type="number" value={precioManual}
                       onChange={e => setPrecioManual(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg text-white outline-none focus:border-orange-500"
+                      className="w-full px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white outline-none focus:border-orange-500"
                       placeholder="Ej: 5000"
                     />
                   </div>
                 </div>
-                <div className="bg-orange-500 p-4 rounded-xl shadow-lg shadow-orange-500/20 text-right flex flex-col justify-center h-full">
-                  <div className="text-orange-100 text-xs font-bold mb-1">PRECIO DE VENTA PÚBLICO</div>
+                <div className="bg-orange-600 p-4 rounded-xl shadow-lg shadow-orange-500/20 text-right flex flex-col justify-center h-full">
+                  <div className="text-orange-200 text-xs font-bold mb-1">PRECIO DE VENTA PÚBLICO</div>
                   <div className="text-3xl font-black text-white flex items-center justify-end gap-2">
                     {precioManual !== '' && (
                       <span className="line-through text-orange-300 text-lg">${precioSugerido.toFixed(2)}</span>
@@ -463,10 +463,10 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
             </div>
 
             {/* SECCIÓN 4: VISTA PREVIA */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <h4 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">4. Vista Previa del Plato</h4>
+            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+              <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">4. Vista Previa del Plato</h4>
               <div className="flex gap-6 items-start">
-                <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center text-4xl shrink-0">
+                <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-700 border border-slate-600 flex items-center justify-center text-4xl shrink-0">
                   {imagenUrl && !imgPreviewError
                     ? (
                       <img
@@ -481,16 +481,16 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-2xl font-black text-slate-900 truncate">
-                    {nombre || <span className="text-slate-300 font-normal text-lg">Sin nombre</span>}
+                  <h3 className="text-2xl font-black text-white truncate">
+                    {nombre || <span className="text-slate-500 font-normal text-lg">Sin nombre</span>}
                   </h3>
                   {categoriaSel && (
-                    <span className="inline-block mt-1 px-2.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-black rounded-full">
+                    <span className="inline-block mt-1 px-2.5 py-0.5 bg-orange-900/40 text-orange-400 text-xs font-black rounded-full border border-orange-700/50">
                       {categoriaSel.nombre}
                     </span>
                   )}
-                  {descripcion && <p className="text-sm text-slate-500 mt-2 line-clamp-2">{descripcion}</p>}
-                  <p className="text-3xl font-black text-orange-600 mt-2">${precioFinal.toFixed(2)}</p>
+                  {descripcion && <p className="text-sm text-slate-400 mt-2 line-clamp-2">{descripcion}</p>}
+                  <p className="text-3xl font-black text-green-400 mt-2">${precioFinal.toFixed(2)}</p>
                 </div>
               </div>
 
@@ -503,8 +503,8 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                         key={r.ingrediente_id}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold border ${
                           r.es_removible
-                            ? 'bg-green-50 border-green-200 text-green-700'
-                            : 'bg-slate-100 border-slate-200 text-slate-700'
+                            ? 'bg-green-900/40 border-green-700/50 text-green-400'
+                            : 'bg-slate-700 border-slate-600 text-slate-300'
                         }`}
                       >
                         {r._nombre}
@@ -512,7 +512,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                           {r.cantidad_requerida} {r._unidad}
                         </span>
                         {r.es_removible && (
-                          <span className="text-[10px] bg-green-200 text-green-800 px-1 rounded font-black">
+                          <span className="text-[10px] bg-green-900/60 text-green-300 px-1 rounded font-black">
                             REMOVIBLE
                           </span>
                         )}
@@ -521,7 +521,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 p-4 bg-slate-50 rounded-xl text-center text-slate-400 text-sm border-2 border-dashed border-slate-200">
+                <div className="mt-4 p-4 bg-slate-900/50 rounded-xl text-center text-slate-500 text-sm border border-dashed border-slate-600">
                   Seleccioná ingredientes en la tabla para ver la composición del plato.
                 </div>
               )}
@@ -531,11 +531,11 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 bg-white flex justify-end items-center gap-3 shrink-0">
-          <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition">
+        <div className="px-6 py-4 border-t border-slate-700 bg-slate-800 flex justify-end items-center gap-3 shrink-0">
+          <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-400 font-bold hover:bg-slate-700 rounded-xl transition">
             Cancelar
           </button>
-          <button form="product-form" type="submit" className="px-6 py-2.5 bg-orange-600 text-white font-black rounded-xl hover:bg-orange-700 transition shadow-lg shadow-orange-600/20 flex items-center gap-2">
+          <button form="product-form" type="submit" className="px-6 py-2.5 bg-orange-600 text-white font-black rounded-xl hover:bg-orange-500 transition shadow-lg shadow-orange-600/20 flex items-center gap-2">
             Guardar Plato <ArrowRight className="w-5 h-5" />
           </button>
         </div>

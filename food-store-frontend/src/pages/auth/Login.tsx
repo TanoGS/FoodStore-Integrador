@@ -36,12 +36,17 @@ export default function Login() {
       // 2. Guardamos la LLAVE REAL y el usuario en Zustand
       setLogin(tokenJWT, datosUsuario); 
 
-      // 3. Redirigimos según el rol
-      const esAdmin = datosUsuario.roles?.includes('ADMIN') || 
-                      datosUsuario.roles?.some((r: any) => r.rol_codigo === 'ADMIN' || r === 'ADMIN');
+      // 3. Redirigimos según el rol — cualquier rol de staff va al panel
+      const esStaff = datosUsuario.roles?.some(
+        (r: any) =>
+          r.codigo === 'ADMIN' ||
+          r.codigo === 'GESTOR_STOCK' ||
+          r.codigo === 'GESTOR_PEDIDOS' ||
+          r.codigo === 'COCINA'
+      );
 
-      if (esAdmin) {
-        navigate('/admin'); // 👈 Ojo: asumo que tu panel es /admin, no /
+      if (esStaff) {
+        navigate('/admin'); // Panel de gestión
       } else {
         navigate('/'); // Redirige a la tienda para el cliente normal
       }

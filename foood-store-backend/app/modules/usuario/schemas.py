@@ -43,7 +43,8 @@ class UsuarioPublic(UsuarioBase):
     id: int
     activo: bool
     creado_en: datetime
-    actualizado_en: Optional[datetime] = None  
+    actualizado_en: Optional[datetime] = None
+    eliminado_en: Optional[datetime] = None
     roles: List[RolPublic] = []
 
     class Config:
@@ -73,6 +74,7 @@ class UsuarioPublic(UsuarioBase):
                 "activo": data.activo,
                 "creado_en": data.creado_en,
                 "actualizado_en": data.actualizado_en,
+                "eliminado_en": data.eliminado_en,
                 "roles": roles_reales
             }
         return data

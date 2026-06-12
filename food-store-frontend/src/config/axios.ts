@@ -10,14 +10,21 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// INTERCEPTOR DE PETICIONES (Agrega el Token directo del LocalStorage)
+// INTERCEPTOR DE PETICIONES (Agrega el Token directo del Storage)
 api.interceptors.request.use(
   (config) => {
     let token = null;
 
-    // 1. Leemos directamente del Local Storage para evitar el delay de Zustand
-    const authStorageStr = localStorage.getItem('auth-store'); 
-    
+    // 1. Leemos del storage. sessionStorage primero porque es donde
+    //    AHORA vive el authStore (desde el cambio a multi-user-multi-tab).
+    //    localStorage queda como fallback por si quedó algo viejo de
+    //    antes del cambio.
+    //    La clave debe coincidir con el `name` del persist en store/authStore.ts
+    const KEY = 'food-store-auth';
+    const fromSession = sessionStorage.getItem(KEY);
+    const fromLocal   = localStorage.getItem(KEY);
+    const authStorageStr = fromSession ?? fromLocal;
+
     if (authStorageStr) {
       try {
         const parsedData = JSON.parse(authStorageStr);
@@ -27,11 +34,11 @@ api.interceptors.request.use(
       }
     }
 
-    // 2. Fallback: Si no lo encontró en Local Storage, intentamos con el Store
+    // 2. Fallback: Si no lo encontró en el storage, intentamos con el Store
     if (!token) {
       token = useAuthStore.getState().token;
     }
-    
+
    if (token && config.headers) {
       // Le avisamos a la consola para auditar
      // console.log("🔑 [AXIOS] Enviando petición a:", config.url, "con token:", token.substring(0, 15) + "...");

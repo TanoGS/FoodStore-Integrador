@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useState } from 'react';
-import { User, LogIn, LogOut, Settings, MapPin, ShoppingCart } from 'lucide-react'; 
+import { User, LogIn, LogOut, Settings, MapPin, ShoppingCart, ShoppingBag } from 'lucide-react';
 import { useCartStore } from '../../store/cartStore';
 import CartDrawer from '../layout/CartDrawer';
 
@@ -14,8 +14,10 @@ const Navbar = () => {
   const handleLogout = () => { logout(); navigate('/'); };
 
 
+  // Mismo conjunto que ADMIN_ROLES en App.tsx (incluye Cajero y Cocina
+  // para que también puedan entrar a su panel desde el navbar).
   const canSeeAdminPanel = user?.roles?.some((rol: any) => 
-    ['ADMIN', 'GESTOR_STOCK', 'GESTOR_PEDIDOS'].includes(rol.codigo || rol.rol_codigo)
+    ['ADMIN', 'GESTOR_STOCK', 'GESTOR_PEDIDOS', 'CAJERO', 'COCINA'].includes(rol.codigo || rol.rol_codigo)
   );
 
   return (
@@ -29,9 +31,18 @@ const Navbar = () => {
         
         {isAuthenticated ? (
           <>
+            {/* Mis Pedidos */}
+            <Link
+              to="/mis-pedidos"
+              className="flex items-center gap-1.5 text-slate-300 hover:text-orange-400 transition-colors text-sm font-medium"
+            >
+              <ShoppingBag className="w-5 h-5" />
+              <span className="hidden md:block">Mis Pedidos</span>
+            </Link>
+
             {/* Mis Direcciones  */}
-            <Link 
-              to="/mis-direcciones" 
+            <Link
+              to="/mis-direcciones"
               className="flex items-center gap-1.5 text-slate-300 hover:text-orange-400 transition-colors text-sm font-medium"
             >
               <MapPin className="w-5 h-5" />

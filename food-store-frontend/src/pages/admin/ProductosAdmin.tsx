@@ -105,12 +105,12 @@ export default function ProductosAdmin() {
   const colSpan = puedeEditar ? 9 : 8;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6">
 
       {/* CABECERA */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-black text-slate-800">Catálogo y Recetas</h2>
+          <h2 className="text-xl font-black text-white">Catálogo y Recetas</h2>
           <p className="text-slate-400 text-sm mt-0.5">
             {filtrados.length} producto{filtrados.length !== 1 ? 's' : ''} encontrado{filtrados.length !== 1 ? 's' : ''}
           </p>
@@ -122,12 +122,12 @@ export default function ProductosAdmin() {
             placeholder="Buscar por nombre..."
             value={filtroNombre}
             onChange={e => handleFiltro(e.target.value)}
-            className="border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 w-full sm:w-60"
+            className="border border-slate-600 rounded-xl px-4 py-2 text-sm bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 w-full sm:w-60"
           />
           {puedeEditar && (
             <button
               onClick={abrirNuevo}
-              className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors whitespace-nowrap"
             >
               <Plus className="h-4 w-4" /> Nuevo
             </button>
@@ -139,29 +139,29 @@ export default function ProductosAdmin() {
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse text-sm">
           <thead>
-            <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
-              <th className="p-3 font-semibold">Nombre</th>
-              <th className="p-3 font-semibold text-right">Costo</th>
-              <th className="p-3 font-semibold text-right">Margen de Ganancia</th>
-              <th className="p-3 font-semibold text-right">Precio Final</th>
-              <th className="p-3 font-semibold text-center">Estado</th>
-              {puedeEditar && <th className="p-3 font-semibold text-center">Modificar</th>}
-              <th className="p-3 font-semibold">Fecha de Creación</th>
-              <th className="p-3 font-semibold">Última Modificación</th>
-              <th className="p-3 font-semibold text-center">Eliminado</th>
+            <tr className="bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+              <th className="p-3 font-bold">Nombre</th>
+              <th className="p-3 font-bold text-right">Costo</th>
+              <th className="p-3 font-bold text-right">Margen de Ganancia</th>
+              <th className="p-3 font-bold text-right">Precio Final</th>
+              <th className="p-3 font-bold text-center">Estado</th>
+              {puedeEditar && <th className="p-3 font-bold text-center">Modificar</th>}
+              <th className="p-3 font-bold">Fecha de Creación</th>
+              <th className="p-3 font-bold">Última Modificación</th>
+              <th className="p-3 font-bold text-center">Eliminado</th>
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-700">
             {isLoading ? (
               <tr>
-                <td colSpan={colSpan} className="p-8 text-center text-gray-500">
+                <td colSpan={colSpan} className="p-8 text-center text-slate-400">
                   Cargando catálogo...
                 </td>
               </tr>
             ) : paginados.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} className="p-8 text-center text-gray-400">
+                <td colSpan={colSpan} className="p-8 text-center text-slate-500">
                   Sin resultados para "{filtroNombre}".
                 </td>
               </tr>
@@ -169,15 +169,14 @@ export default function ProductosAdmin() {
               paginados.map((prod) => {
                 const eliminado = prod.eliminado_en !== null;
                 const rowCls = eliminado
-                  ? 'bg-red-50 text-red-800'
-                  : 'hover:bg-gray-50 text-gray-800';
+                  ? 'bg-red-900/20 text-red-300'
+                  : 'hover:bg-slate-700/30 text-slate-200';
 
                 return (
                   <tr key={prod.id} className={`transition-colors ${rowCls}`}>
 
-                    {/* Nombre */}
                     <td className="p-3">
-                      <span className="font-bold">{prod.nombre}</span>
+                      <span className="font-bold text-white">{prod.nombre}</span>
                       {prod.stock_cantidad > 0 && (
                         <div className="text-[11px] text-slate-400 mt-0.5">
                           {prod.stock_cantidad} en stock
@@ -185,22 +184,21 @@ export default function ProductosAdmin() {
                       )}
                     </td>
 
-                    <td className="p-3 text-right font-medium text-slate-500">
+                    <td className="p-3 text-right font-medium text-slate-400">
                       ${prod.costo_produccion.toFixed(2)}
                     </td>
 
-                    <td className={`p-3 text-right font-bold ${eliminado ? '' : 'text-orange-600'}`}>
+                    <td className={`p-3 text-right font-bold ${eliminado ? 'text-slate-500' : 'text-orange-400'}`}>
                       <span className="inline-flex items-center gap-0.5">
                         <ArrowUpRight className="h-3.5 w-3.5" />
                         {prod.margen_ganancia}%
                       </span>
                     </td>
 
-                    <td className={`p-3 text-right font-black text-lg ${eliminado ? '' : 'text-green-600'}`}>
+                    <td className={`p-3 text-right font-black text-lg ${eliminado ? 'text-slate-500' : 'text-green-400'}`}>
                       ${prod.precio.toFixed(2)}
                     </td>
 
-                    {/* Estado: toggle activo/inactivo */}
                     <td className="p-3 text-center">
                       {puedeEditar && !eliminado ? (
                         <button
@@ -208,24 +206,23 @@ export default function ProductosAdmin() {
                           title={prod.activo ? 'Ocultar del catálogo' : 'Mostrar en catálogo'}
                         >
                           {prod.activo
-                            ? <ToggleRight className="h-8 w-8 text-green-500 mx-auto" />
-                            : <ToggleLeft  className="h-8 w-8 text-gray-400 mx-auto" />}
+                            ? <ToggleRight className="h-8 w-8 text-green-400 mx-auto" />
+                            : <ToggleLeft  className="h-8 w-8 text-slate-500 mx-auto" />}
                         </button>
                       ) : (
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${prod.activo ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${prod.activo ? 'bg-green-900/40 text-green-400 border border-green-700/50' : 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
                           {prod.activo ? 'En Menú' : 'Oculto'}
                         </span>
                       )}
                     </td>
 
-                    {/* Botón Modificar */}
                     {puedeEditar && (
                       <td className="p-3 text-center">
                         {!eliminado && (
                           <button
                             onClick={() => abrirEditar(prod)}
                             title="Editar producto"
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-1.5 text-blue-400 hover:bg-blue-900/30 rounded-lg transition-colors"
                           >
                             <Edit className="h-4 w-4" />
                           </button>
@@ -233,25 +230,23 @@ export default function ProductosAdmin() {
                       </td>
                     )}
 
-                    {/* Fechas */}
-                    <td className="p-3 text-xs whitespace-nowrap text-gray-500">
+                    <td className="p-3 text-xs whitespace-nowrap text-slate-400">
                       {fmtFecha(prod.creado_en)}
                     </td>
-                    <td className="p-3 text-xs whitespace-nowrap text-gray-500">
+                    <td className="p-3 text-xs whitespace-nowrap text-slate-400">
                       {fmtFecha(prod.actualizado_en)}
                     </td>
 
-                    {/* Columna Eliminado: toggle on/off */}
                     <td className="p-3 text-center">
                       {eliminado ? (
                         <div className="flex flex-col items-center gap-1">
-                          <span className="text-[10px] font-bold text-red-600 whitespace-nowrap">
+                          <span className="text-[10px] font-bold text-red-400 whitespace-nowrap">
                             {fmtFecha(prod.eliminado_en)}
                           </span>
                           {puedeEditar && (
                             <button
                               onClick={() => mutReactivar.mutate(prod.id)}
-                              className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                              className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-green-900/40 text-green-400 border border-green-700/50 hover:bg-green-900/60 transition-colors"
                             >
                               <RotateCcw className="h-3 w-3" /> Reactivar
                             </button>
@@ -266,12 +261,12 @@ export default function ProductosAdmin() {
                               }
                             }}
                             title="Dar de baja"
-                            className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600 transition-colors"
+                            className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700 text-slate-400 hover:bg-red-900/40 hover:text-red-400 transition-colors"
                           >
                             <Trash2 className="h-3 w-3" /> Eliminar
                           </button>
                         ) : (
-                          <span className="text-[10px] text-gray-400">Activo</span>
+                          <span className="text-[10px] text-slate-500">Activo</span>
                         )
                       )}
                     </td>
@@ -286,23 +281,23 @@ export default function ProductosAdmin() {
 
       {/* PAGINACIÓN */}
       {totalPaginas > 1 && (
-        <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
-          <span className="text-sm text-slate-500">
+        <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-700">
+          <span className="text-sm text-slate-400">
             Pág. {paginaActual} / {totalPaginas}
-            <span className="ml-2 text-slate-400">({filtrados.length} total)</span>
+            <span className="ml-2 text-slate-500">({filtrados.length} total)</span>
           </span>
           <div className="flex gap-2">
             <button
               onClick={() => setPagina(p => Math.max(1, p - 1))}
               disabled={paginaActual === 1}
-              className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
               onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
               disabled={paginaActual === totalPaginas}
-              className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

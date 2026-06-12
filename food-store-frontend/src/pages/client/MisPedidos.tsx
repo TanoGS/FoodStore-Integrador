@@ -1,7 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { PedidoService, type PedidoPublic } from '../../services/pedido.service';
-import { ShoppingBag, Clock, ChefHat, Truck, CheckCircle, XCircle, Package } from 'lucide-react';
+import { usePedidoEventos } from '../../hooks/usePedidoWebSocket';
+import type { WSEvent } from '../../store/wsStore';
+import {
+  ShoppingBag, Clock, ChefHat, Truck, CheckCircle, XCircle, Package,
+  CheckCircle2, AlertCircle, X,
+} from 'lucide-react';
 
 // Mapa visual de estados (igual que en GestorPedidos pero para el cliente)
 const ESTADO_CONFIG: Record<string, { label: string; color: string }> = {
@@ -25,6 +31,39 @@ export default function MisPedidos() {
     queryFn: PedidoService.listarMisPedidos,
   });
 
+  // Para invalidar la query cuando llega un evento del WS
+  const queryClient = useQueryClient();
+
+  // Toast de feedback (idéntico patrón al GestorPedidos)
+  type Toast = { tipo: 'ok' | 'err'; msg: string };
+  const [toast, setToast] = useState<Toast | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // ──────────────────────────────────────────────────────────────
+  // Suscripción a eventos WebSocket (tiempo real)
+  // ──────────────────────────────────────────────────────────────
+  const handlePedidoEvent = useCallback((ev: WSEvent) => {
+    if (ev.type === 'pedido.mio.actualizado') {
+      const payload = ev.payload as { id: number; estado_codigo: string };
+      // Refetch de la lista para reflejar el cambio
+      queryClient.invalidateQueries({ queryKey: ['mis-pedidos'] });
+      setToast({
+        tipo: 'ok',
+        msg:  `Tu pedido #${payload.id} ahora está "${ESTADO_CONFIG[payload.estado_codigo]?.label ?? payload.estado_codigo}".`,
+      });
+    } else if (ev.type === 'pedido.creado') {
+      // Si el cliente tiene MisPedidos abierto justo después de hacer checkout,
+      // el evento de creación le sumará el pedido al instante.
+      queryClient.invalidateQueries({ queryKey: ['mis-pedidos'] });
+    }
+  }, [queryClient]);
+
+  usePedidoEventos(handlePedidoEvent);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -47,6 +86,31 @@ export default function MisPedidos() {
         <ShoppingBag className="text-orange-500 w-8 h-8" />
         Mis Pedidos
       </h1>
+
+      {/* Toast de feedback en vivo */}
+      {toast && (
+        <div
+          role="alert"
+          className={`mb-6 flex items-start gap-3 p-4 rounded-xl border-2 ${
+            toast.tipo === 'ok'
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}
+        >
+          {toast.tipo === 'ok'
+            ? <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0" />
+            : <AlertCircle  className="w-5 h-5 mt-0.5 shrink-0" />}
+          <p className="font-bold text-sm flex-1">{toast.msg}</p>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-current opacity-60 hover:opacity-100 transition-opacity"
+            aria-label="Cerrar mensaje"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
 
       {pedidos.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">

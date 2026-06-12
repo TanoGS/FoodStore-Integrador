@@ -1,5 +1,40 @@
 import api from '../config/axios';
 
+
+// ─────────────────────────────────────────────────────────────────────
+// Direcciones resumidas (eco del schema DireccionResumida del backend)
+// ─────────────────────────────────────────────────────────────────────
+export interface DireccionResumida {
+  calle:      string | null;
+  numero:     string | null;
+  ciudad:     string | null;
+  referencia: string | null;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────
+// PedidoAdmin — enriquecido para vistas de staff (GestorPedidos)
+// Eco del schema PedidoAdmin del backend.
+// ─────────────────────────────────────────────────────────────────────
+export interface PedidoAdmin {
+  id:                 number;
+  usuario_id:         number;
+  usuario_nombre:      string;
+  usuario_email:      string;
+  direccion_id:       number | null;
+  direccion:          DireccionResumida | null;
+  estado_codigo:      string;
+  forma_pago_codigo:  string;
+  forma_pago_label:   string;
+  subtotal:          number;
+  descuento:          number;
+  costo_envio:        number;
+  total:             number;
+  notas:             string | null;
+  creado_en:         string;
+  detalles:          DetallePedidoPublic[];
+}
+
 // Detalle individual dentro de un pedido
 export interface DetallePedidoPublic {
   producto_id:     number;
@@ -32,37 +67,105 @@ export type Pedido = PedidoPublic;
 // Molde para los items que enviamos al comprar
 export interface PedidoItemPayload {
   producto_id: number;
-  cantidad: number;
+  cantidad:    number;
 }
 
 // Molde exacto del payload de creación
+// Campo "detalles" = mirror del schema PedidoCreate del backend
+// (foood-store-backend/app/modules/pedido/schemas.py:23)
 export interface CrearPedidoPayload {
-  direccion_id: number;
-  items: PedidoItemPayload[];
+  direccion_id:      number;
+  forma_pago_codigo: 'EFECTIVO' | 'TRANSFERENCIA' | 'MERCADOPAGO';
+  detalles:          PedidoItemPayload[];
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// FSM mirror del backend
+// (foood-store-backend/app/modules/pedido/service.py:_FSM)
+// Si se modifica la máquina de estados en el backend, reflejar acá.
+// ─────────────────────────────────────────────────────────────────────
+export const ESTADOS_FSM: Record<string, string[]> = {
+  PENDIENTE:      ['CONFIRMADO',     'CANCELADO'],
+  CONFIRMADO:     ['EN_PREPARACION', 'CANCELADO'],
+  EN_PREPARACION: ['EN_CAMINO',      'CANCELADO'],
+  EN_CAMINO:      ['ENTREGADO'],
+  ENTREGADO:      [],
+  CANCELADO:      [],
+};
+
+// Estados terminales (no se puede cambiar desde acá)
+export const ESTADOS_TERMINALES: readonly string[] = ['ENTREGADO', 'CANCELADO'];
+
+// Códigos de los roles de staff que pueden operar pedidos en el backend
+// (alineado con foood-store-backend/app/modules/pedido/router.py:RoleChecker)
+export const ROLES_STAFF_PEDIDOS: readonly string[] = [
+  'ADMIN',
+  'GESTOR_PEDIDOS',
+  'COCINA',
+];
+
+// Helper para normalizar la respuesta (algunas rutas devuelven array
+// directo, otras { data, total } paginado)
+function normalizarLista(raw: unknown): PedidoPublic[] {
+  if (Array.isArray(raw)) return raw as PedidoPublic[];
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { data?: unknown }).data)) {
+    return (raw as { data: PedidoPublic[] }).data;
+  }
+  return [];
+}
+
+// Helper para normalizar la respuesta de PedidoAdmin (respuesta paginada)
+function normalizarListaAdmin(raw: unknown): PedidoAdmin[] {
+  if (Array.isArray(raw)) return raw as PedidoAdmin[];
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { data?: unknown }).data)) {
+    return (raw as { data: PedidoAdmin[] }).data;
+  }
+  return [];
 }
 
 export const PedidoService = {
   // Admin/Gestor: trae todos. Cliente: solo los suyos. El backend filtra por rol.
   listarTodos: async (): Promise<PedidoPublic[]> => {
     const { data } = await api.get('/pedidos/');
-    return data.data || data;
+    return normalizarLista(data);
   },
 
   // Alias semántico para la pantalla del cliente (llama al mismo endpoint)
   listarMisPedidos: async (): Promise<PedidoPublic[]> => {
     const { data } = await api.get('/pedidos/');
-    return data.data || data;
+    return normalizarLista(data);
   },
 
-  // Cambia el estado del pedido
-  actualizarEstado: async (id: number, nuevoEstado: string): Promise<Pedido> => {
-    const { data } = await api.patch(`/pedidos/${id}/estado`, { estado: nuevoEstado });
-    return data;
+  // Endpoint enriquecido para GestorPedidos (staff). Trae datos expandidos
+  // de cliente, dirección y forma de pago + filtro de período.
+  listarTodosAdmin: async (
+    periodo?: 'DIARIO' | 'MENSUAL',
+  ): Promise<PedidoAdmin[]> => {
+    const params = periodo ? `?periodo=${periodo}` : '';
+    const { data } = await api.get(`/pedidos/admin${params}`);
+    return normalizarListaAdmin(data);
   },
 
-  // 👇 4. REEMPLAZAMOS LOS 'any' CON NUESTRAS INTERFACES
-  crear: async (payload: CrearPedidoPayload): Promise<Pedido> => {
+  // Cambia el estado del pedido.
+  // El backend exige el campo `estado_hacia` y un `motivo` obligatorio
+  // cuando el destino es CANCELADO (AvanzarEstadoRequest en schemas.py).
+  actualizarEstado: async (
+    id: number,
+    nuevoEstado: string,
+    motivo?: string
+  ): Promise<PedidoPublic> => {
+    const body: { estado_hacia: string; motivo?: string } = {
+      estado_hacia: nuevoEstado,
+    };
+    if (motivo && motivo.trim().length > 0) {
+      body.motivo = motivo.trim();
+    }
+    const { data } = await api.patch(`/pedidos/${id}/estado`, body);
+    return data as PedidoPublic;
+  },
+
+  crear: async (payload: CrearPedidoPayload): Promise<PedidoPublic> => {
     const { data } = await api.post('/pedidos/', payload);
-    return data; // Generalmente el backend devuelve el pedido creado
-  }
+    return data as PedidoPublic;
+  },
 };

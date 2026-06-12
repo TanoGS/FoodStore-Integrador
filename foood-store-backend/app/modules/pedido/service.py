@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 from fastapi import HTTPException, status
 from sqlmodel import Session, select
@@ -17,7 +17,37 @@ from .schemas import (
     HistorialEstadoPublic,
 )
 from .unit_of_work import PedidoUnitOfWork
+from .schemas import (
+    PedidoAdmin,
+    DireccionResumida,
+    DetallePedidoPublic,
+)
 from app.modules.catalogo.producto.models import Producto
+
+
+# ---------------------------------------------------------------------------
+# Labels legibles para formas de pago
+# ---------------------------------------------------------------------------
+_FORMA_PAGO_LABELS: dict[str, str] = {
+    "EFECTIVO":      "Efectivo",
+    "TRANSFERENCIA": "Transferencia",
+    "MERCADOPAGO":   "MercadoPago",
+}
+
+
+# ---------------------------------------------------------------------------
+# Resultado de un cambio de estado (para emitir por WebSocket)
+# ---------------------------------------------------------------------------
+class PedidoCambioResult(NamedTuple):
+    pedido:    PedidoPublic
+    historial: HistorialEstadoPublic
+
+
+# ---------------------------------------------------------------------------
+# Roles de STAFF con acceso a la gestión operativa de pedidos
+# (ver todos, listar, cancelar sin restricción de estado, avanzar FSM)
+# ---------------------------------------------------------------------------
+_ROLES_STAFF_PEDIDOS = ("ADMIN", "GESTOR_PEDIDOS", "CAJERO", "COCINA")
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +73,7 @@ class PedidoService:
     # ====================================================================
     # 1. CREAR PEDIDO — TRANSACCIÓN ATÓMICA CON UNIT OF WORK
     # ====================================================================
-    def crear_pedido(self, usuario_id: int, datos: PedidoCreate) -> PedidoPublic:
+    def crear_pedido(self, usuario_id: int, datos: PedidoCreate) -> PedidoCambioResult:
         with PedidoUnitOfWork(self._session) as uow:
             # 1. Validar productos y construir snapshots (precio + nombre congelados)
             detalles: List[DetallePedido] = []
@@ -56,7 +86,7 @@ class PedidoService:
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail=f"Producto {item.producto_id} no disponible.",
                     )
-                
+
                 precio = float(producto.precio)
                 sub = round(precio * item.cantidad, 2)
                 subtotal += sub
@@ -77,7 +107,13 @@ class PedidoService:
             costo_envio = 50.0
             total = round(subtotal - descuento + costo_envio, 2)
 
-            # 3. Crear el pedido
+            # 3. Crear el pedido en estado PENDIENTE.
+            #    El pedido pasa a CONFIRMADO únicamente cuando el webhook
+            #    de MercadoPago notifica que el pago fue aprobado
+            #    (ver procesar_webhook en app/modules/pagos/service.py).
+            #    Este flujo permite:
+            #    - Pagos online (MercadoPago) → PENDIENTE → CONFIRMADO (vía webhook)
+            #    - Pagos manuales (Efectivo/Transferencia, futuro) → PENDIENTE → CONFIRMADO (vía cajero)
             pedido = Pedido(
                 usuario_id=usuario_id,
                 direccion_id=datos.direccion_id,
@@ -103,24 +139,28 @@ class PedidoService:
                 estado_desde=None,
                 estado_hacia=EstadoPedido.PENDIENTE,
                 usuario_id=usuario_id,
-                motivo="Creación del pedido",
+                motivo="Pedido creado - Esperando confirmación de pago",
             )
             uow.pedidos.add_historial(historial)
 
             # 6. Refrescar y retornar
             self._session.flush()
             self._session.refresh(pedido)
-            return PedidoPublic.model_validate(pedido)
+            self._session.refresh(historial)
+            return PedidoCambioResult(
+                pedido=PedidoPublic.model_validate(pedido),
+                historial=HistorialEstadoPublic.model_validate(historial),
+            )
 
     # ====================================================================
-    # 2. AVANZAR ESTADO — SOLO ADMIN / GESTOR_PEDIDOS
+    # 2. AVANZAR ESTADO — STAFF (ADMIN / GESTOR_PEDIDOS / CAJERO / COCINA)
     # ====================================================================
     def avanzar_estado(
         self,
         pedido_id: int,
         datos: AvanzarEstadoRequest,
         actor_id: int,
-    ) -> PedidoPublic:
+    ) -> PedidoCambioResult:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = uow.pedidos.get_by_id_with_details(pedido_id)
             if not pedido:
@@ -164,7 +204,11 @@ class PedidoService:
 
             self._session.flush()
             self._session.refresh(pedido)
-            return PedidoPublic.model_validate(pedido)
+            self._session.refresh(historial)
+            return PedidoCambioResult(
+                pedido=PedidoPublic.model_validate(pedido),
+                historial=HistorialEstadoPublic.model_validate(historial),
+            )
 
     # ====================================================================
     # 3. CANCELAR PEDIDO — CLIENTE O STAFF
@@ -175,7 +219,7 @@ class PedidoService:
         motivo: str,
         usuario_id: int,
         roles: List[str],
-    ) -> PedidoPublic:
+    ) -> PedidoCambioResult:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = uow.pedidos.get_by_id_with_details(pedido_id)
             if not pedido:
@@ -184,7 +228,7 @@ class PedidoService:
                     detail=f"Pedido {pedido_id} no encontrado.",
                 )
 
-            es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
+            es_privilegiado = self._es_staff(roles)
 
             # Verificar propiedad del pedido para clientes
             if not es_privilegiado and pedido.usuario_id != usuario_id:
@@ -228,7 +272,11 @@ class PedidoService:
 
             self._session.flush()
             self._session.refresh(pedido)
-            return PedidoPublic.model_validate(pedido)
+            self._session.refresh(historial)
+            return PedidoCambioResult(
+                pedido=PedidoPublic.model_validate(pedido),
+                historial=HistorialEstadoPublic.model_validate(historial),
+            )
 
     # ====================================================================
     # 4. LISTAR PEDIDOS — PAGINADO
@@ -242,7 +290,7 @@ class PedidoService:
         estado: Optional[str] = None,
     ):
         with PedidoUnitOfWork(self._session) as uow:
-            es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
+            es_privilegiado = self._es_staff(roles)
 
             if es_privilegiado:
                 if estado:
@@ -275,7 +323,7 @@ class PedidoService:
                     detail=f"Pedido {pedido_id} no encontrado.",
                 )
 
-            es_privilegiado = any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
+            es_privilegiado = self._es_staff(roles)
             if not es_privilegiado and pedido.usuario_id != usuario_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -301,10 +349,10 @@ class PedidoService:
             return [HistorialEstadoPublic.model_validate(h) for h in historiales]
 
     # ====================================================================
-    # 7. LISTAR TODOS PARA GESTIÓN (ADMIN)
+    # 7. LISTAR TODOS PARA GESTIÓN (STAFF)
     # ====================================================================
     def obtener_todos_los_pedidos(self, offset: int = 0, limit: int = 20):
-        """Obtiene todos los pedidos para panel de administración."""
+        """Obtiene todos los pedidos para panel de operación de staff."""
         with PedidoUnitOfWork(self._session) as uow:
             pedidos_orm = uow.pedidos.get_all_incluyendo_eliminados(offset, limit)
             total = uow.pedidos.count_total()
@@ -315,8 +363,11 @@ class PedidoService:
     # 8. MÉTODOS DE UTILIDAD (INTERNOS)
     # ====================================================================
     def _es_staff(self, roles: List[str]) -> bool:
-        """Helper para verificar si el usuario tiene rol de staff."""
-        return any(r in roles for r in ("ADMIN", "GESTOR_PEDIDOS"))
+        """
+        Helper para verificar si el usuario tiene rol de staff operativo
+        sobre pedidos (ADMIN, GESTOR_PEDIDOS, CAJERO, COCINA).
+        """
+        return any(r in roles for r in _ROLES_STAFF_PEDIDOS)
 
     def _verificar_acceso_pedido(
         self,
@@ -332,3 +383,96 @@ class PedidoService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para acceder a este pedido.",
             )
+
+    def _construir_pedido_admin(self, pedido: Pedido) -> PedidoAdmin:
+        """
+        Construye un PedidoAdmin a partir de un pedido ORM,
+        enriquecerlo con datos del usuario y la dirección.
+        Si falla el enriquecimiento (usuario/dirección no existen),
+        retorna datos de fallback en vez de crashear toda la lista.
+        """
+        usuario_nombre = f"Usuario #{pedido.usuario_id}"
+        usuario_email  = ""
+        direccion: Optional[DireccionResumida] = None
+
+        try:
+            from app.modules.usuario.models import Usuario
+            from app.modules.direccion.models import DireccionEntrega
+
+            usuario = self._session.get(Usuario, pedido.usuario_id)
+            if usuario:
+                usuario_nombre = getattr(usuario, 'nombre', None) or usuario_nombre
+                usuario_email  = getattr(usuario, 'email',  '') or ''
+
+            if pedido.direccion_id:
+                dir_orm = self._session.get(DireccionEntrega, pedido.direccion_id)
+                if dir_orm:
+                    direccion = DireccionResumida(
+                        calle=      getattr(dir_orm, 'calle',      None),
+                        numero=     getattr(dir_orm, 'numero',     None),
+                        ciudad=     getattr(dir_orm, 'ciudad',     None),
+                        referencia= getattr(dir_orm, 'referencia',  None),
+                    )
+        except Exception:
+            # Si falla el enriquecimiento, continuamos con datos parciales
+            pass
+
+        try:
+            detalles = [
+                DetallePedidoPublic.model_validate(d) for d in pedido.detalles
+            ] if pedido.detalles else []
+        except Exception:
+            detalles = []
+
+        return PedidoAdmin(
+            id=pedido.id,
+            usuario_id=pedido.usuario_id,
+            usuario_nombre=usuario_nombre,
+            usuario_email=usuario_email,
+            direccion_id=pedido.direccion_id,
+            direccion=direccion,
+            estado_codigo=pedido.estado_codigo,
+            forma_pago_codigo=pedido.forma_pago_codigo,
+            forma_pago_label=_FORMA_PAGO_LABELS.get(
+                pedido.forma_pago_codigo, pedido.forma_pago_codigo
+            ),
+            subtotal=pedido.subtotal,
+            descuento=pedido.descuento,
+            costo_envio=pedido.costo_envio,
+            total=pedido.total,
+            notas=pedido.notas,
+            creado_en=pedido.creado_en,
+            actualizado_en=pedido.actualizado_en,
+            detalles=detalles,
+        )
+
+    # ====================================================================
+    # 9. LISTAR PEDIDOS ADMIN (ENRIQUECIDOS) CON FILTRO DE PERÍODO
+    # ====================================================================
+    def obtener_todos_admin(
+        self,
+        periodo: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict:
+        """
+        Lista pedidos enriquecidos para el GestorPedidos.
+        Incluye nombre/email del cliente, dirección completa y forma de pago
+        en formato legible.
+
+        Args:
+            periodo: 'TODOS' | 'DIARIO' | 'MENSUAL' | None
+            offset: desplazamiento para paginación
+            limit: cantidad máxima de pedidos a devolver
+        """
+        with PedidoUnitOfWork(self._session) as uow:
+            # Normalizar período
+            periodo_norm = periodo if periodo in ('DIARIO', 'MENSUAL') else None
+
+            pedidos_orm = uow.pedidos.get_all_incluyendo_eliminados_por_periodo(
+                periodo_norm, offset, limit
+            )
+            total = uow.pedidos.count_total_por_periodo(periodo_norm)
+
+            pedidos_admin = [self._construir_pedido_admin(p) for p in pedidos_orm]
+            return {"data": pedidos_admin, "total": total}

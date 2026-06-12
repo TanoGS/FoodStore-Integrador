@@ -3,9 +3,35 @@
 venv/
 env/
 
-# Archivos de entorno (Secretos)
+
+.vscode/
+
+# Archivos de entorno 
 .env
+.env.local
+.env.*.local
 
 # Caché de Python
 __pycache__/
 *.pyc
+*$py.class
+*.pyo
+*.pyd
+
+# Database
+*.sqlite3
+*.db
+foodstore_db.sql
+
+# Alembic (migrations)
+alembic/
+!alembic/
+
+# Logs
+*.log
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~

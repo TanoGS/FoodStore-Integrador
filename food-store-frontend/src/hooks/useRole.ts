@@ -14,6 +14,7 @@ export function useRole() {
     isAdmin:        roles.includes('ADMIN'),
     isGestorStock:  roles.includes('GESTOR_STOCK'),
     isGestorPedidos:roles.includes('GESTOR_PEDIDOS'),
+    isCocina:       roles.includes('COCINA'),
     isCliente:      roles.includes('CLIENTE'),
     // Admin puede todo; Gestor de Stock puede crear/editar productos, categorías, ingredientes
     puedeEditar:    roles.includes('ADMIN') || roles.includes('GESTOR_STOCK'),

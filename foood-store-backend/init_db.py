@@ -11,6 +11,7 @@ from app.modules.catalogo.shared_models import ProductoCategoria, ProductoIngred
 from app.modules.usuario.models import Usuario, Rol, UsuarioRol, Permiso, RolPermiso
 from app.modules.pedido.models import Pedido, DetallePedido, HistorialEstadoPedido
 from app.modules.direccion.models import DireccionEntrega
+from app.modules.pagos.models import Pago
 
 # ---------------------------------------------------------------------------
 # Catálogo de permisos: (nombre, descripción)
@@ -55,6 +56,18 @@ PERMISOS_POR_ROL = {
         "GESTIONAR_PEDIDOS",
         "VER_PEDIDOS_PROPIOS",
     ],
+    "CAJERO": [
+        "VER_CATALOGO",
+        "CREAR_PEDIDO",
+        "GESTIONAR_PEDIDOS",
+        "VER_PEDIDOS_PROPIOS",
+        "VER_PERFIL_PROPIO",
+    ],
+    "COCINA": [
+        "VER_CATALOGO",
+        "GESTIONAR_PEDIDOS",
+        "VER_PERFIL_PROPIO",
+    ],
 }
 
 def inicializar_sistema():
@@ -72,6 +85,8 @@ def inicializar_sistema():
             Rol(codigo="CLIENTE",        nombre="Cliente Tienda",   descripcion="Usuario final consumidor del catálogo"),
             Rol(codigo="GESTOR_STOCK",   nombre="Gestor de Stock",  descripcion="Administrador del inventario e ingredientes"),
             Rol(codigo="GESTOR_PEDIDOS", nombre="Gestor de Pedidos",descripcion="Operador encargado de la máquina de estados de las órdenes"),
+            Rol(codigo="CAJERO",         nombre="Cajero",           descripcion="Toma pedidos en mostrador, confirma pagos y gestiona el ciclo inicial del pedido"),
+            Rol(codigo="COCINA",         nombre="Cocina",           descripcion="Responsable de preparar pedidos y marcarlos como listos/en camino"),
         ]
         for rol in roles_maestros:
             session.add(rol)
@@ -115,11 +130,32 @@ def inicializar_sistema():
             asignado_por_id=admin_user.id,
             expires_at=None,
         ))
+
+        print("💵 Registrando usuario Cajero de prueba...")
+        cajero_user = Usuario(
+            email="cajero@foodstore.com",
+            nombre="Cajero",
+            apellido="FoodStore",
+            cel="2615555678",
+            password=get_password_hash("cajero123"),
+            activo=True,
+            creado_en=datetime.utcnow()
+        )
+        session.add(cajero_user)
+        session.flush()
+
+        print("🔗 Vinculando Cajero → Rol CAJERO...")
+        session.add(UsuarioRol(
+            usuario_id=cajero_user.id,
+            rol_codigo="CAJERO",
+            asignado_por_id=admin_user.id,
+            expires_at=None,
+        ))
         session.commit()
 
     print("\n=======================================================================")
-    print("¡Base de Datos FoodStore inicializada con éxito! 🚀")
-    print("Roles: ADMIN | CLIENTE | GESTOR_STOCK | GESTOR_PEDIDOS")
+    print("¡Base de Datos FoodStore inicializada con éxito! ")
+    print("Roles: ADMIN | CLIENTE | GESTOR_STOCK | GESTOR_PEDIDOS | CAJERO | COCINA")
     print(f"Permisos seeded: {len(PERMISOS)}")
     print("Usuario Admin: admin@foodstore.com | Clave: admin123")
     print("=======================================================================")

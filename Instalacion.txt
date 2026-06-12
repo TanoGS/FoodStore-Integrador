@@ -1,17 +1,36 @@
-backend: 
-1. Crear y activar el entorno virtual:
+backend:
+1. Requisito previo: tener Python 3.11+ instalado y en el PATH.
+   Cualquiera de estas opciones funciona:
+     a) Python oficial (recomendado): https://www.python.org/downloads/
+     b) Miniconda:                    https://docs.conda.io/en/latest/miniconda.html
+     c) Anaconda:                     https://www.anaconda.com/download
+     d) pyenv-win (avanzado):         https://pyenv-win.github.io/
+
+   Verificación rápida en PowerShell:
+     python --version
+     python -c "import sys; print(sys.platform)"   # debe decir "win32"
+
+   ⚠️ EVITAR Pythons en ubicaciones no estándar (ej: D:\bin\python.exe):
+     pueden crear venvs con estructura Unix (bin/) que NO funcionan en Windows.
+
+2. Crear y activar el entorno virtual:
 python -m venv venv
 
-# En Windows:
-venv\Scripts\activate
+# En Windows (PowerShell):
+      .\venv\Scripts\Activate.ps1
 
-# En Mac/Linux:
-source venv/bin/activate
+# En Windows (CMD):
+venv\Scripts\activate.bat
 
-2. Instalar las dependencias:
+3. Instalar las dependencias:
 pip install -r requirements.txt
 
-3. Crear .env:
+pip install websockets
+
+# Alternativa más completa (incluye websockets, httptools, watchfiles, etc):
+# pip install 'uvicorn[standard]'
+
+4. Crear .env:
 
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/foodstore_db"
 
@@ -19,20 +38,56 @@ SECRET_KEY="una_contrasena_super_larga_y_dificil_de_adivinar_que_nadie_sepa_1234
 
  - - - 
 
- pip install fastapi uvicorn sqlmodel psycopg2-binary alembic "passlib[bcrypt]" "python-jose[cryptography]" "python-multipart"
+ pip install fastapi 'uvicorn[standard]' sqlmodel psycopg2-binary alembic "passlib[bcrypt]" "python-jose[cryptography]" "python-multipart" websockets
 
 - - - 
 
-4. Crear las tablas en la Base de Datos:
+5. Crear las tablas en la Base de Datos:
 alembic upgrade head
 
-5. Encender el servidor:
-uvicorn main:app --reload 
+6. Encender el servidor:
+
+  uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+
+python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+
 
 # (O uvicorn app.main:app --reload, dependiendo de dónde esté tu main.py)
 
 Frontend:
 npm install
+-------
+NGROK
+
+
+ngrok http 5173
+
+ngrok config edit
+
+version: "3"
+agent:
+    authtoken: --..--..--
+
+# Túnel para el frontend (puerto 5173)
+front:
+    addr: 5173
+    proto: http
+    host-header: localhost
+
+# Túnel para el backend (puerto 8000)  
+back:
+    addr: 8000
+    proto: http
+    host-header: localhost
+
+ngrok start --all
+
+ejecutar desde una sola terminal:
+
+start cmd /k ngrok start front back
+
+tasklist | findstr ngrok
+taskkill /F /IM ngrok.exe
 
 
 npm create vite@latest food-store-frontend -- --template react-ts
@@ -81,6 +136,6 @@ En la pestaña General:
 
 Format: Selecciona el mismo que usaste (Custom).
 
-Filename: Busca el archivo backup_food_store que trajiste desde tu otra PC. (Nota: a veces pgAdmin filtra por ciertas extensiones; si no ves tu archivo, cambia el filtro de formato de archivo en la ventana de búsqueda a "All Files").
+Filename: archivo backup_food_store  
 
 Haz clic en el botón Restore.

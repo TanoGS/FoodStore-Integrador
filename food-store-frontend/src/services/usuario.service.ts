@@ -1,33 +1,32 @@
-import axios from 'axios';
-import { useAuthStore } from '../store/authStore';
+import api from '../config/axios';
 
-// URL base de tu backend
-const API_URL = 'http://127.0.0.1:8000/api/usuarios';
-
-// Helper para obtener los headers con el token
-const getAuthHeaders = () => {
-  const token = useAuthStore.getState().token;
-  return { headers: { Authorization: `Bearer ${token}` } };
-};
+// El prefijo base se completa solo desde la instancia `api` (VITE_API_URL).
+// El token (Bearer) y la cookie HttpOnly los inyectan los interceptores de `api`.
 
 export const UsuarioService = {
   listar: async () => {
-    const response = await axios.get(`${API_URL}/gestion`, getAuthHeaders());
-    return response.data; // { data: [...], total: X }
+    // GET /api/usuarios/gestion -> List[UsuarioPublic] (array directo)
+    const response = await api.get('/usuarios/gestion');
+    return response.data;
   },
 
   crear: async (datos: any) => {
-    const response = await axios.post(`${API_URL}/registro`, datos, getAuthHeaders());
+    const response = await api.post('/usuarios/registro', datos);
+    return response.data;
+  },
+
+  actualizar: async (id: number, datos: any) => {
+    const response = await api.patch(`/usuarios/${id}`, datos);
     return response.data;
   },
 
   eliminar: async (id: number) => {
-    const response = await axios.delete(`${API_URL}/${id}`, getAuthHeaders());
+    const response = await api.delete(`/usuarios/${id}`);
     return response.data;
   },
 
   reactivar: async (id: number) => {
-    const response = await axios.patch(`${API_URL}/${id}/reactivar`, {}, getAuthHeaders());
+    const response = await api.patch(`/usuarios/${id}/reactivar`);
     return response.data;
   }
 };

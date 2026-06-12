@@ -86,10 +86,58 @@ class HistorialEstadoPublic(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Collection schemas
+# Direcciones resumidas (para enriquecer pedido en vistas de staff)
+# ---------------------------------------------------------------------------
+
+class DireccionResumida(BaseModel):
+    calle:      Optional[str] = None
+    numero:     Optional[str] = None
+    ciudad:     Optional[str] = None
+    referencia: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Colección: PedidoAdmin — enriquecido para staff
 # ---------------------------------------------------------------------------
 
 class PedidoList(BaseModel):
     """Schema para respuestas paginadas de pedidos."""
     data: List[PedidoPublic]
     total: int
+
+
+class PedidoAdminList(BaseModel):
+    """Schema para respuestas paginadas de pedidos enriquecidos (staff)."""
+    data: List["PedidoAdmin"]
+    total: int
+
+
+class PedidoAdmin(BaseModel):
+    """
+    Schema enriquecido para vistas administrativas (GestorPedidos).
+    Incluye datos expandidos del usuario, dirección y forma de pago
+    que en PedidoPublic solo vienen como IDs.
+    """
+    id:                  int
+    usuario_id:          int
+    usuario_nombre:       str
+    usuario_email:       str
+    direccion_id:        Optional[int] = None
+    direccion:           Optional[DireccionResumida] = None
+    estado_codigo:        str
+    forma_pago_codigo:    str
+    forma_pago_label:     str
+    subtotal:            float
+    descuento:           float
+    costo_envio:         float
+    total:               float
+    notas:               Optional[str] = None
+    creado_en:           datetime
+    actualizado_en:      Optional[datetime] = None
+    detalles:            List[DetallePedidoPublic] = []
+
+    class Config:
+        from_attributes = True

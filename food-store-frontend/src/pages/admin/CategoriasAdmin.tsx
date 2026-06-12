@@ -107,12 +107,12 @@ export default function CategoriasAdmin() {
   const colSpan = puedeEditar ? 6 : 5;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6">
 
       {/* CABECERA */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-black text-slate-800">Categorías</h2>
+          <h2 className="text-xl font-black text-white">Categorías</h2>
           <p className="text-slate-400 text-sm mt-0.5">
             {filtradas.length} categoría{filtradas.length !== 1 ? 's' : ''} encontrada{filtradas.length !== 1 ? 's' : ''}
           </p>
@@ -124,12 +124,12 @@ export default function CategoriasAdmin() {
             placeholder="Buscar por nombre..."
             value={filtroNombre}
             onChange={e => handleFiltro(e.target.value)}
-            className="border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 w-full sm:w-60"
+            className="border border-slate-600 rounded-xl px-4 py-2 text-sm bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 w-full sm:w-60"
           />
           {puedeEditar && (
             <button
               onClick={abrirNuevo}
-              className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors whitespace-nowrap"
             >
               <Plus className="h-4 w-4" /> Nueva
             </button>
@@ -141,26 +141,26 @@ export default function CategoriasAdmin() {
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse text-sm">
           <thead>
-            <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
-              <th className="p-3 font-semibold">Nombre</th>
-              <th className="p-3 font-semibold text-center">Estado</th>
-              {puedeEditar && <th className="p-3 font-semibold text-center">Modificar</th>}
-              <th className="p-3 font-semibold">Fecha de Creación</th>
-              <th className="p-3 font-semibold">Última Modificación</th>
-              <th className="p-3 font-semibold text-center">Eliminado</th>
+            <tr className="bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+              <th className="p-3 font-bold">Nombre</th>
+              <th className="p-3 font-bold text-center">Estado</th>
+              {puedeEditar && <th className="p-3 font-bold text-center">Modificar</th>}
+              <th className="p-3 font-bold">Fecha de Creación</th>
+              <th className="p-3 font-bold">Última Modificación</th>
+              <th className="p-3 font-bold text-center">Eliminado</th>
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-700">
             {isLoading ? (
               <tr>
-                <td colSpan={colSpan} className="p-8 text-center text-gray-500">
+                <td colSpan={colSpan} className="p-8 text-center text-slate-400">
                   Cargando categorías...
                 </td>
               </tr>
             ) : paginadas.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} className="p-8 text-center text-gray-400">
+                <td colSpan={colSpan} className="p-8 text-center text-slate-500">
                   Sin resultados para "{filtroNombre}".
                 </td>
               </tr>
@@ -168,20 +168,20 @@ export default function CategoriasAdmin() {
               paginadas.map((cat) => {
                 const eliminada = cat.eliminado_en !== null;
                 const rowCls = eliminada
-                  ? 'bg-red-50 text-red-800'
-                  : 'hover:bg-gray-50 text-gray-800';
+                  ? 'bg-red-900/20 text-red-300'
+                  : 'hover:bg-slate-700/30 text-slate-200';
 
                 return (
                   <tr key={cat.id} className={`transition-colors ${rowCls}`}>
 
                     {/* Nombre + subcategorías */}
                     <td className="p-3">
-                      <span className="font-bold">{cat.nombre}</span>
+                      <span className="font-bold text-white">{cat.nombre}</span>
                       {cat.parent_id && (
-                        <span className="ml-2 text-[10px] text-slate-400 italic">sub-categoría</span>
+                        <span className="ml-2 text-[10px] text-slate-500 italic">sub-categoría</span>
                       )}
                       {cat.subcategorias?.length > 0 && (
-                        <div className="flex items-center gap-1 text-[11px] text-blue-500 mt-0.5">
+                        <div className="flex items-center gap-1 text-[11px] text-blue-400 mt-0.5">
                           <Layers className="h-3 w-3" />
                           {cat.subcategorias.length} sub-categoría{cat.subcategorias.length !== 1 ? 's' : ''}
                         </div>
@@ -196,11 +196,11 @@ export default function CategoriasAdmin() {
                           title={cat.activo ? 'Ocultar del catálogo' : 'Mostrar en catálogo'}
                         >
                           {cat.activo
-                            ? <ToggleRight className="h-8 w-8 text-green-500 mx-auto" />
-                            : <ToggleLeft  className="h-8 w-8 text-gray-400 mx-auto" />}
+                            ? <ToggleRight className="h-8 w-8 text-green-400 mx-auto" />
+                            : <ToggleLeft  className="h-8 w-8 text-slate-500 mx-auto" />}
                         </button>
                       ) : (
-                        <span className={`text-[11px] font-bold ${cat.activo ? 'text-green-600' : 'text-gray-400'}`}>
+                        <span className={`text-[11px] font-bold ${cat.activo ? 'text-green-400' : 'text-slate-500'}`}>
                           {cat.activo ? 'Visible' : 'Oculta'}
                         </span>
                       )}
@@ -213,7 +213,7 @@ export default function CategoriasAdmin() {
                           <button
                             onClick={() => abrirEditar(cat)}
                             title="Editar categoría"
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-1.5 text-blue-400 hover:bg-blue-900/30 rounded-lg transition-colors"
                           >
                             <Edit className="h-4 w-4" />
                           </button>
@@ -222,10 +222,10 @@ export default function CategoriasAdmin() {
                     )}
 
                     {/* Fechas */}
-                    <td className="p-3 text-xs whitespace-nowrap text-gray-500">
+                    <td className="p-3 text-xs whitespace-nowrap text-slate-400">
                       {fmtFecha(cat.creado_en)}
                     </td>
-                    <td className="p-3 text-xs whitespace-nowrap text-gray-500">
+                    <td className="p-3 text-xs whitespace-nowrap text-slate-400">
                       {fmtFecha(cat.actualizado_en)}
                     </td>
 
@@ -233,13 +233,13 @@ export default function CategoriasAdmin() {
                     <td className="p-3 text-center">
                       {eliminada ? (
                         <div className="flex flex-col items-center gap-1">
-                          <span className="text-[10px] font-bold text-red-600 whitespace-nowrap">
+                          <span className="text-[10px] font-bold text-red-400 whitespace-nowrap">
                             {fmtFecha(cat.eliminado_en)}
                           </span>
                           {puedeEditar && (
                             <button
                               onClick={() => mutReactivar.mutate(cat.id)}
-                              className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                              className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-green-900/40 text-green-400 border border-green-700/50 hover:bg-green-900/60 transition-colors"
                             >
                               <RotateCcw className="h-3 w-3" /> Reactivar
                             </button>
@@ -258,12 +258,12 @@ export default function CategoriasAdmin() {
                               }
                             }}
                             title="Dar de baja"
-                            className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600 transition-colors"
+                            className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700 text-slate-400 hover:bg-red-900/40 hover:text-red-400 transition-colors"
                           >
                             <Trash2 className="h-3 w-3" /> Eliminar
                           </button>
                         ) : (
-                          <span className="text-[10px] text-gray-400">Activa</span>
+                          <span className="text-[10px] text-slate-500">Activa</span>
                         )
                       )}
                     </td>
@@ -278,23 +278,23 @@ export default function CategoriasAdmin() {
 
       {/* PAGINACIÓN */}
       {totalPaginas > 1 && (
-        <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
-          <span className="text-sm text-slate-500">
+        <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-700">
+          <span className="text-sm text-slate-400">
             Pág. {paginaActual} / {totalPaginas}
-            <span className="ml-2 text-slate-400">({filtradas.length} total)</span>
+            <span className="ml-2 text-slate-500">({filtradas.length} total)</span>
           </span>
           <div className="flex gap-2">
             <button
               onClick={() => setPagina(p => Math.max(1, p - 1))}
               disabled={paginaActual === 1}
-              className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
               onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
               disabled={paginaActual === totalPaginas}
-              className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
