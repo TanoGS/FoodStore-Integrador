@@ -7,23 +7,37 @@ import { PedidoService } from '../services/pedido.service';
 import { PagosService } from '../services/pagos.service';
 import {
   MapPin, ShoppingBag, CreditCard, ArrowLeft, Loader2, Plus,
-  Banknote, ArrowRightLeft, Smartphone, Check, Clock, ExternalLink,
+  Banknote, Smartphone, Check, Clock, ExternalLink, Store, Truck,
 } from 'lucide-react';
 
-type FormaPagoCodigo = 'EFECTIVO' | 'TRANSFERENCIA' | 'MERCADOPAGO';
+type FormaPagoCodigo = 'EFECTIVO' | 'MERCADOPAGO';
+export type TipoEntrega = 'EN_LOCAL' | 'DELIVERY';
 
 interface FormaPagoItem {
   codigo: FormaPagoCodigo;
   label: string;
   icon: React.ElementType;
   desc: string;
-  habilitada: boolean;
 }
 
 const FORMAS_PAGO: FormaPagoItem[] = [
-  { codigo: 'EFECTIVO',      label: 'Efectivo',      icon: Banknote,       desc: 'Pagás al recibir el pedido',     habilitada: false },
-  { codigo: 'TRANSFERENCIA', label: 'Transferencia', icon: ArrowRightLeft, desc: 'Te pasamos el CBU al confirmar', habilitada: false },
-  { codigo: 'MERCADOPAGO',   label: 'MercadoPago',   icon: Smartphone,     desc: 'Pago online con tarjeta / dinero en cuenta', habilitada: true  },
+  {
+    codigo: 'EFECTIVO',
+    label: 'Efectivo',
+    icon: Banknote,
+    desc: 'Pagás al confirmar el pedido',
+  },
+  {
+    codigo: 'MERCADOPAGO',
+    label: 'MercadoPago',
+    icon: Smartphone,
+    desc: 'Pago online con tarjeta / dinero en cuenta',
+  },
+];
+
+const TIPO_ENTREGA_ITEMS: { codigo: TipoEntrega; label: string; icon: React.ElementType; desc: string }[] = [
+  { codigo: 'EN_LOCAL', label: 'En el local', icon: Store, desc: 'Venís a retirar tu pedido al local' },
+  { codigo: 'DELIVERY', label: 'Delivery',    icon: Truck,  desc: 'Te lo llevamos a tu dirección'     },
 ];
 
 export default function Checkout() {
@@ -33,11 +47,13 @@ export default function Checkout() {
 
   const [direcciones, setDirecciones] = useState<Direccion[]>([]);
   const [direccionId, setDireccionId] = useState<number | null>(null);
+  const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('DELIVERY');
   const [formaPago,   setFormaPago]   = useState<FormaPagoCodigo>('MERCADOPAGO');
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paso, setPaso] = useState<'creando' | 'pagando' | 'redirigiendo'>('creando');
 
+  // Redirect if not authenticated or cart empty
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login?redirect=checkout');
@@ -47,14 +63,19 @@ export default function Checkout() {
       navigate('/');
       return;
     }
+  }, [isAuthenticated, items.length, navigate]);
 
+  // Load direcciones and set defaults
+  useEffect(() => {
     const cargarDatos = async () => {
       try {
         const data = await DireccionService.listar();
         setDirecciones(data);
-        const principal = data.find((d: Direccion) => d.predeterminada);
-        if (principal) setDireccionId(principal.id);
-        else if (data.length > 0) setDireccionId(data[0].id);
+        if (tipoEntrega === 'DELIVERY') {
+          const principal = data.find((d: Direccion) => d.predeterminada);
+          if (principal) setDireccionId(principal.id);
+          else if (data.length > 0) setDireccionId(data[0].id);
+        }
       } catch (error) {
         console.error("Error al cargar direcciones", error);
       } finally {
@@ -62,57 +83,66 @@ export default function Checkout() {
       }
     };
     cargarDatos();
-  }, [isAuthenticated, items.length, navigate]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /**
-   * FLUJO MERCADOPAGO:
-   * 1) Crear pedido (estado PENDIENTE) en el backend
-   * 2) Llamar a /pagos/crear → backend crea preference en MP
-   * 3) Redirigir al init_point (Checkout PRO de MP)
-   * 4) MP redirige a /pedido-exitoso/{id}?status=approved|pending|rejected
-   * 5) MP notifica al webhook → backend avanza pedido a CONFIRMADO
-   */
+  // When tipoEntrega changes to DELIVERY, select a default address
+  useEffect(() => {
+    if (tipoEntrega === 'DELIVERY' && direcciones.length > 0 && !direccionId) {
+      const principal = direcciones.find((d: Direccion) => d.predeterminada);
+      if (principal) setDireccionId(principal.id);
+      else setDireccionId(direcciones[0].id);
+    }
+  }, [tipoEntrega, direcciones, direccionId]);
+
+  // Si cambia a DELIVERY y está seleccionado EFECTIVO, forzar a MERCADOPAGO
+  // (EFECTIVO no está disponible para delivery)
+  useEffect(() => {
+    if (tipoEntrega === 'DELIVERY' && formaPago === 'EFECTIVO') {
+      setFormaPago('MERCADOPAGO');
+    }
+  }, [tipoEntrega]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleFinalizarPedido = async () => {
-    if (!direccionId) {
-      alert("Por favor, selecciona una dirección de entrega.");
+    if (tipoEntrega === 'DELIVERY' && !direccionId) {
+      alert("Por favor, seleccioná una dirección de entrega.");
       return;
     }
 
     try {
       setIsSubmitting(true);
-
-      // ── Paso 1: crear pedido en estado PENDIENTE ──
       setPaso('creando');
+
       const itemsPayload = items.map(it => ({
         producto_id: it.producto.id,
         cantidad: it.cantidad,
+        personalizacion: it.producto.personalizacion
+          ? it.producto.personalizacion.map(p => p.id)
+          : null,
       }));
+
       const pedidoCreado = await PedidoService.crear({
-        direccion_id:      direccionId,
-        forma_pago_codigo: formaPago,
-        detalles:          itemsPayload,
+        direccion_id:       tipoEntrega === 'DELIVERY' ? direccionId : null,
+        forma_pago_codigo:  formaPago,
+        tipo_entrega:        tipoEntrega,
+        detalles:            itemsPayload,
       });
 
-      // Si NO es MercadoPago (futuro), solo confirmamos
+      // EFECTIVO → pantalla de confirmación sin redirigir a MP
       if (formaPago !== 'MERCADOPAGO') {
         clearCart();
-        navigate(`/pedido-exitoso/${pedidoCreado.id}?status=pending`);
+        navigate(`/pedido-exitoso/${pedidoCreado.id}?status=pending&forma_pago=${formaPago}`);
         return;
       }
 
-      // ── Paso 2: crear preference de pago en MP ──
+      // MERCADOPAGO → redirigir a MP
       setPaso('pagando');
       const pago = await PagosService.crear(pedidoCreado.id);
 
-      // ── Paso 3: redirigir al checkout de MP ──
       if (pago.init_point) {
         setPaso('redirigiendo');
-        // Limpiamos carrito antes de salir
         clearCart();
-        // Redirección a MercadoPago
         window.location.href = pago.init_point;
       } else {
-        // Sin init_point: probablemente faltan credenciales TEST
         alert(
           "No se pudo obtener el link de pago de MercadoPago.\n" +
           "Verificá que MP_ACCESS_TOKEN esté configurado en el backend.\n\n" +
@@ -149,17 +179,24 @@ export default function Checkout() {
     </div>
   );
 
+  const shippingCost = tipoEntrega === 'DELIVERY' ? 50 : 0;
+  const totalPrice = getTotalPrice();
+  const finalTotal = totalPrice + shippingCost;
+  const requiresDireccion = tipoEntrega === 'DELIVERY' && !direccionId;
+
   const botonLabel =
     paso === 'redirigiendo' ? (<><ExternalLink className="w-5 h-5" /> Redirigiendo a MercadoPago…</>) :
     paso === 'pagando'      ? (<><Loader2 className="w-5 h-5 animate-spin" /> Generando link de pago…</>) :
     paso === 'creando' && isSubmitting ? (<><Loader2 className="w-5 h-5 animate-spin" /> Creando pedido…</>) :
-    (<><CreditCard className="w-5 h-5" /> CONFIRMAR Y PAGAR</>);
+    formaPago === 'EFECTIVO'
+      ? (<><Banknote className="w-5 h-5" /> CONFIRMAR PEDIDO</>)
+      : (<><CreditCard className="w-5 h-5" /> CONFIRMAR Y PAGAR</>);
 
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4">
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-        {/* COLUMNA IZQUIERDA */}
+        {/* ── COLUMNA IZQUIERDA ── */}
         <div className="lg:col-span-2 space-y-6">
           <Link to="/" className="flex items-center gap-2 text-slate-500 hover:text-orange-600 transition-colors mb-4">
             <ArrowLeft className="w-4 h-4" /> Volver al catálogo
@@ -167,76 +204,128 @@ export default function Checkout() {
 
           <h1 className="text-3xl font-black text-slate-800">Finalizar Pedido</h1>
 
-          {/* Dirección */}
+          {/* ── Tipo de Entrega ── */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-orange-100 p-2 rounded-xl text-orange-600">
-                <MapPin className="w-6 h-6" />
+                <Store className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold text-slate-800">Dirección de Entrega</h2>
+              <h2 className="text-xl font-bold text-slate-800">Tipo de Entrega</h2>
             </div>
-
-            {direcciones.length === 0 ? (
-              <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl">
-                <p className="text-slate-500 mb-4">No tienes direcciones registradas</p>
-                <Link to="/mis-direcciones" className="inline-flex items-center gap-2 bg-slate-900 text-white px-6 py-2 rounded-xl font-bold">
-                  <Plus className="w-4 h-4" /> Agregar Dirección
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {direcciones.map((dir) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {TIPO_ENTREGA_ITEMS.map((te) => {
+                const Icon = te.icon;
+                const active = tipoEntrega === te.codigo;
+                return (
                   <label
-                    key={dir.id}
-                    className={`relative flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                      direccionId === dir.id ? 'border-orange-500 bg-orange-50/30' : 'border-slate-100 hover:border-slate-200'
+                    key={te.codigo}
+                    className={`relative flex flex-col items-start gap-1.5 p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                      active
+                        ? 'border-orange-500 bg-orange-50/40 shadow-sm'
+                        : 'border-slate-100 hover:border-slate-200'
                     }`}
                   >
                     <input
                       type="radio"
-                      name="direccion"
+                      name="tipoEntrega"
                       className="hidden"
-                      onChange={() => setDireccionId(dir.id)}
-                      checked={direccionId === dir.id}
+                      onChange={() => {
+                        setTipoEntrega(te.codigo);
+                        if (te.codigo === 'EN_LOCAL') {
+                          // En local: no necesita dirección
+                          setDireccionId(null);
+                        }
+                      }}
+                      checked={active}
                     />
-                    <div className="flex-1">
-                      <p className="font-bold text-slate-800">{dir.calle} {dir.numero}</p>
-                      <p className="text-sm text-slate-500">{dir.ciudad} · CP {dir.codigo_postal}</p>
-                    </div>
-                    {direccionId === dir.id && (
-                      <div className="bg-orange-500 rounded-full p-1 text-white">
-                        <Check className="w-4 h-4" />
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg ${active ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <Icon className="w-4 h-4" />
                       </div>
+                      <span className="font-bold text-slate-800 text-sm">{te.label}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-snug">{te.desc}</p>
+                    {active && (
+                      <Check className="absolute top-2 right-2 w-4 h-4 text-orange-500" />
                     )}
                   </label>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
 
-          {/* Método de Pago */}
+          {/* ── Dirección (solo si es delivery) ── */}
+          {tipoEntrega === 'DELIVERY' && (
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="bg-orange-100 p-2 rounded-xl text-orange-600">
+                  <MapPin className="w-6 h-6" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800">Dirección de Entrega</h2>
+              </div>
+
+              {direcciones.length === 0 ? (
+                <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl">
+                  <p className="text-slate-500 mb-4">No tenés direcciones registradas</p>
+                  <Link to="/mis-direcciones" className="inline-flex items-center gap-2 bg-slate-900 text-white px-6 py-2 rounded-xl font-bold">
+                    <Plus className="w-4 h-4" /> Agregar Dirección
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {direcciones.map((dir) => (
+                    <label
+                      key={dir.id}
+                      className={`relative flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                        direccionId === dir.id
+                          ? 'border-orange-500 bg-orange-50/30'
+                          : 'border-slate-100 hover:border-slate-200'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="direccion"
+                        className="hidden"
+                        onChange={() => setDireccionId(dir.id)}
+                        checked={direccionId === dir.id}
+                      />
+                      <div className="flex-1">
+                        <p className="font-bold text-slate-800">{dir.calle} {dir.numero}</p>
+                        <p className="text-sm text-slate-500">{dir.ciudad} · CP {dir.codigo_postal}</p>
+                      </div>
+                      {direccionId === dir.id && (
+                        <div className="bg-orange-500 rounded-full p-1 text-white">
+                          <Check className="w-4 h-4" />
+                        </div>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Método de Pago ── */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-orange-100 p-2 rounded-xl text-orange-600">
                 <CreditCard className="w-6 h-6" />
               </div>
               <h2 className="text-xl font-bold text-slate-800">Método de Pago</h2>
-              <span className="ml-auto text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-600 px-2 py-1 rounded-full flex items-center gap-1">
-                <Smartphone className="w-3 h-3" /> MERCADO PAGO
-              </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {FORMAS_PAGO.map((fp) => {
-                const Icon   = fp.icon;
+                const Icon = fp.icon;
                 const active = formaPago === fp.codigo;
-                const disabled = !fp.habilitada;
+                // EFECTIVO no está disponible para delivery
+                const isDisabled = tipoEntrega === 'DELIVERY' && fp.codigo === 'EFECTIVO';
                 return (
                   <label
                     key={fp.codigo}
                     className={`relative flex flex-col items-start gap-1.5 p-4 rounded-2xl border-2 transition-all ${
-                      disabled
-                        ? 'border-slate-100 bg-slate-50 opacity-60 grayscale cursor-not-allowed'
+                      isDisabled
+                        ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
                         : active
                           ? 'border-blue-500 bg-blue-50/40 shadow-sm cursor-pointer'
                           : 'border-slate-100 hover:border-slate-200 cursor-pointer'
@@ -246,9 +335,9 @@ export default function Checkout() {
                       type="radio"
                       name="formaPago"
                       className="hidden"
-                      onChange={() => !disabled && setFormaPago(fp.codigo)}
+                      onChange={() => !isDisabled && setFormaPago(fp.codigo)}
                       checked={active}
-                      disabled={disabled}
+                      disabled={isDisabled}
                     />
                     <div className="flex items-center gap-2">
                       <div className={`p-1.5 rounded-lg ${active ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
@@ -257,13 +346,18 @@ export default function Checkout() {
                       <span className="font-bold text-slate-800 text-sm">{fp.label}</span>
                     </div>
                     <p className="text-xs text-slate-500 leading-snug">{fp.desc}</p>
-                    {!disabled && active && (
+                    {isDisabled && (
+                      <span className="absolute top-2 right-2 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                        No disponible
+                      </span>
+                    )}
+                    {active && !isDisabled && (
                       <Check className="absolute top-2 right-2 w-4 h-4 text-blue-500" />
                     )}
-                    {disabled && (
-                      <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
-                        <Clock className="w-2.5 h-2.5" />
-                        Próximamente
+                    {fp.codigo === 'MERCADOPAGO' && !isDisabled && (
+                      <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
+                        <Smartphone className="w-2.5 h-2.5" />
+                        Recomendado
                       </span>
                     )}
                   </label>
@@ -271,20 +365,34 @@ export default function Checkout() {
               })}
             </div>
 
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3">
-              <Smartphone className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm text-blue-900 font-bold">Pago 100% seguro con MercadoPago</p>
-                <p className="text-xs text-blue-700 mt-0.5">
-                  Al confirmar, serás redirigido a MercadoPago para completar el pago con tarjeta de
-                  crédito/débito, dinero en cuenta o Rapipago. Tu pedido se confirmará automáticamente.
-                </p>
+            {formaPago === 'EFECTIVO' && (
+              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex gap-3">
+                <Banknote className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-yellow-900 font-bold">Pagás al confirmar el pedido</p>
+                  <p className="text-xs text-yellow-700 mt-0.5">
+                    Un cajero verificará tu pedido y te indicará el monto a pagar. Tu pedido queda en
+                    espera hasta que el pago sea confirmado.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
+            {formaPago === 'MERCADOPAGO' && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3">
+                <Smartphone className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-blue-900 font-bold">Pago 100% seguro con MercadoPago</p>
+                  <p className="text-xs text-blue-700 mt-0.5">
+                    Al confirmar, serás redirigido a MercadoPago para completar el pago con tarjeta de
+                    crédito/débito, dinero en cuenta o Rapipago. Tu pedido se confirmará automáticamente.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: Resumen */}
+        {/* ── COLUMNA DERECHA: Resumen ── */}
         <div className="lg:col-span-1">
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 sticky top-8">
             <div className="flex items-center gap-2 mb-6">
@@ -306,22 +414,27 @@ export default function Checkout() {
             <div className="border-t border-slate-100 pt-6 space-y-4">
               <div className="flex justify-between items-center text-slate-500">
                 <span>Subtotal</span>
-                <span>${getTotalPrice()}</span>
+                <span>${totalPrice}</span>
               </div>
               <div className="flex justify-between items-center text-slate-500">
                 <span>Envío</span>
-                <span className="text-green-600 font-bold">¡Gratis!</span>
+                {shippingCost === 0 ? (
+                  <span className="text-green-600 font-bold">¡Gratis!</span>
+                ) : (
+                  <span>${shippingCost}</span>
+                )}
               </div>
               <div className="flex justify-between items-center pt-2">
                 <span className="text-xl font-black text-slate-800">Total</span>
-                <span className="text-2xl font-black text-blue-600">${getTotalPrice()}</span>
+                <span className="text-2xl font-black text-blue-600">${finalTotal}</span>
               </div>
             </div>
 
             <button
               onClick={handleFinalizarPedido}
-              disabled={isSubmitting || !direccionId}
+              disabled={isSubmitting || requiresDireccion}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-4 rounded-2xl font-black text-lg mt-8 transition-all shadow-lg active:scale-95 flex justify-center items-center gap-2"
+              title={requiresDireccion ? 'Seleccioná una dirección de entrega para continuar' : undefined}
             >
               {botonLabel}
             </button>

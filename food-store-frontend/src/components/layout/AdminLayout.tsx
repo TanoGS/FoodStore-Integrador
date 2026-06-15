@@ -13,8 +13,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Estado de colapso: se inicializa desde sessionStorage para que
-  // sobreviva al refresh de la misma tab.
+  
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem(SIDEBAR_KEY) === 'true';
@@ -47,13 +46,13 @@ export default function AdminLayout() {
 
   if (!isAuthenticated) return null;
 
-  // Definimos qué roles pueden ver cada ítem del menú
+  // Roles
   const navItems = [
     { 
       name: 'Dashboard', 
       path: '/admin', 
       icon: LayoutDashboard, 
-      roles: ['ADMIN', 'GESTOR_STOCK', 'GESTOR_PEDIDOS'] 
+      roles: ['ADMIN', 'GESTOR_PEDIDOS'] 
     },
     { 
       name: 'Productos', 

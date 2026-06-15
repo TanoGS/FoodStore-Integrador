@@ -26,6 +26,8 @@ export interface PedidoAdmin {
   estado_codigo:      string;
   forma_pago_codigo:  string;
   forma_pago_label:   string;
+  tipo_entrega:       string;   // 'EN_LOCAL' | 'DELIVERY'
+  tipo_entrega_label: string;   // 'En el local' | 'Delivery'
   subtotal:          number;
   descuento:          number;
   costo_envio:        number;
@@ -37,11 +39,13 @@ export interface PedidoAdmin {
 
 // Detalle individual dentro de un pedido
 export interface DetallePedidoPublic {
-  producto_id:     number;
-  cantidad:        number;
-  nombre_snapshot: string;
-  precio_snapshot: number;
-  subtotal_snap:   number;
+  producto_id:           number;
+  cantidad:              number;
+  nombre_snapshot:       string;
+  precio_snapshot:       number;
+  subtotal_snap:        number;
+  personalizacion?:       number[];       // IDs de ingredientes removidos
+  personalizacion_nombres?: string[];    // Nombres para mostrar
 }
 
 // Molde completo del pedido (fiel al backend: PedidoPublic)
@@ -66,17 +70,27 @@ export type Pedido = PedidoPublic;
 
 // Molde para los items que enviamos al comprar
 export interface PedidoItemPayload {
-  producto_id: number;
-  cantidad:    number;
+  producto_id:     number;
+  cantidad:        number;
+  personalizacion?: number[] | null;
 }
 
 // Molde exacto del payload de creación
 // Campo "detalles" = mirror del schema PedidoCreate del backend
 // (foood-store-backend/app/modules/pedido/schemas.py:23)
+export type TipoEntrega = 'EN_LOCAL' | 'DELIVERY';
+
+export const TIPO_ENTREGA_LABELS: Record<TipoEntrega, string> = {
+  EN_LOCAL: 'En el local',
+  DELIVERY: 'Delivery',
+};
+
 export interface CrearPedidoPayload {
-  direccion_id:      number;
-  forma_pago_codigo: 'EFECTIVO' | 'TRANSFERENCIA' | 'MERCADOPAGO';
-  detalles:          PedidoItemPayload[];
+  direccion_id:       number | null;
+  forma_pago_codigo:  'EFECTIVO' | 'MERCADOPAGO';
+  tipo_entrega:       TipoEntrega;
+  notas?:              string | null;
+  detalles:            PedidoItemPayload[];
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -131,9 +145,17 @@ export const PedidoService = {
   },
 
   // Alias semántico para la pantalla del cliente (llama al mismo endpoint)
-  listarMisPedidos: async (): Promise<PedidoPublic[]> => {
-    const { data } = await api.get('/pedidos/');
-    return normalizarLista(data);
+  listarMisPedidos: async (params?: {
+    offset?: number;
+    limit?: number;
+  }): Promise<{ data: PedidoPublic[]; total: number }> => {
+    const { offset = 0, limit = 10 } = params ?? {};
+    const { data } = await api.get('/pedidos/', { params: { offset, limit } });
+    // El backend devuelve { data: [...], total: N }
+    if (Array.isArray(data)) {
+      return { data: data as PedidoPublic[], total: (data as PedidoPublic[]).length };
+    }
+    return data as { data: PedidoPublic[]; total: number };
   },
 
   // Endpoint enriquecido para GestorPedidos (staff). Trae datos expandidos

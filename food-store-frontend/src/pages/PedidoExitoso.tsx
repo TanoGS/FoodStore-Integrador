@@ -2,23 +2,29 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   CheckCircle, Clock, XCircle, ShoppingBag, Home, ListOrdered, Loader2,
-  ExternalLink, AlertTriangle,
+  ExternalLink, AlertTriangle, Banknote,
 } from 'lucide-react';
 import { PagosService, type PagoResponse } from '../services/pagos.service';
 
-type EstadoPago = 'loading' | 'approved' | 'pending' | 'rejected' | 'error';
+type EstadoPago = 'loading' | 'approved' | 'pending' | 'rejected' | 'error' | 'efectivo_pendiente';
 
 export default function PedidoExitoso() {
   const { pedidoId } = useParams<{ pedidoId: string }>();
   const [searchParams] = useSearchParams();
-  const statusFromMP = searchParams.get('status'); // ?status=approved|pending|rejected
+  const statusFromMP = searchParams.get('status');   // ?status=approved|pending|rejected
+  const formaPagoURL  = searchParams.get('forma_pago'); // ?forma_pago=EFECTIVO
 
   const [pago, setPago] = useState<PagoResponse | null>(null);
-  const [estado, setEstado] = useState<EstadoPago>(statusFromMP as EstadoPago || 'loading');
+  const [estado, setEstado] = useState<EstadoPago>(() => {
+    // Si viene de pago en efectivo, mostrar estado especial sin consultar backend
+    if (formaPagoURL === 'EFECTIVO') return 'efectivo_pendiente';
+    return (statusFromMP as EstadoPago) || 'loading';
+  });
 
   // Consultar el pago al backend para confirmar el estado real
   useEffect(() => {
-    if (!pedidoId) return;
+    // Si es pago en efectivo, NO consultamos PagosService — el pedido queda pendiente de confirmación
+    if (!pedidoId || formaPagoURL === 'EFECTIVO') return;
 
     const fetchPago = async () => {
       try {
@@ -35,13 +41,18 @@ export default function PedidoExitoso() {
     };
 
     fetchPago();
-  }, [pedidoId, statusFromMP]);
+  }, [pedidoId, statusFromMP, formaPagoURL]);
 
   // ── Configuración visual según estado ──
   const configs: Record<EstadoPago, {
     icon: any; iconColor: string; bgColor: string;
     title: string; subtitle: string; badge: string; badgeClass: string;
   }> = {
+    efectivo_pendiente: {
+      icon: Banknote, iconColor: 'text-yellow-500', bgColor: 'bg-yellow-50',
+      title: 'Pedido en espera', subtitle: 'Un cajero confirmará tu pedido. Te avisaremos cuando esté listo.',
+      badge: 'PAGO EN EFECTIVO', badgeClass: 'bg-yellow-100 text-yellow-700',
+    },
     approved: {
       icon: CheckCircle, iconColor: 'text-green-500', bgColor: 'bg-green-50',
       title: '¡Pago aprobado!', subtitle: 'Tu pedido fue confirmado y se está preparando.',

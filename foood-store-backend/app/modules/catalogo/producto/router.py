@@ -18,10 +18,10 @@ def get_service(session: Session = Depends(get_session)) -> ProductoService:
 
 
 @router.post("", response_model=ProductoPublic, status_code=status.HTTP_201_CREATED,
-             dependencies=[_solo_admin])
+             dependencies=[_admin_o_stock])
 def crear_producto(data: ProductoCreate, svc: ProductoService = Depends(get_service)):
     """
-    Crea un plato final con escandallo automático. Solo ADMIN.
+    Crea un plato final con escandallo automático. ADMIN o GESTOR_STOCK.
     """
     return svc.crear_producto(data)
 
@@ -56,14 +56,14 @@ def obtener_producto(producto_id: int, svc: ProductoService = Depends(get_servic
     return svc.obtener_producto(producto_id)
 
 
-@router.patch("/{producto_id}", response_model=ProductoPublic, dependencies=[_solo_admin])
+@router.patch("/{producto_id}", response_model=ProductoPublic, dependencies=[_admin_o_stock])
 def actualizar_producto(
     producto_id: int,
     data: ProductoUpdate,
     svc: ProductoService = Depends(get_service),
 ):
     """
-    Actualiza un producto. Recalcula escandallo si se envía nueva receta. Solo ADMIN.
+    Actualiza un producto. Recalcula escandallo si se envía nueva receta. ADMIN o GESTOR_STOCK.
     """
     return svc.actualizar_producto(producto_id, data)
 
@@ -80,18 +80,18 @@ def toggle_disponibilidad(
 
 
 @router.patch("/{producto_id}/reactivar", response_model=ProductoPublic,
-              dependencies=[_solo_admin])
+              dependencies=[_admin_o_stock])
 def reactivar_producto(
     producto_id: int, svc: ProductoService = Depends(get_service)
 ):
-    """Restaura un producto dado de baja (limpia eliminado_en). Solo ADMIN."""
+    """Restaura un producto dado de baja (limpia eliminado_en). ADMIN o GESTOR_STOCK."""
     return svc.reactivar_producto(producto_id)
 
 
 @router.delete("/{producto_id}", status_code=status.HTTP_204_NO_CONTENT,
-               dependencies=[_solo_admin])
+               dependencies=[_admin_o_stock])
 def eliminar_producto(
     producto_id: int, svc: ProductoService = Depends(get_service)
 ):
-    """Soft-delete: oculta el producto del catálogo. Solo ADMIN."""
+    """Soft-delete: oculta el producto del catálogo. ADMIN o GESTOR_STOCK."""
     svc.eliminar_producto(producto_id)

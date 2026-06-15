@@ -1,0 +1,24 @@
+# =============================================================================
+# requirements.txt — Dependencias del proyecto
+# =============================================================================
+# Fijar versiones garantiza builds reproducibles.
+# Instalar con: pip install -r requirements.txt
+# =============================================================================
+
+# ─── Framework web ───────────────────────────────────────────────────────────
+# FastAPI incluye uvicorn[standard] (servidor ASGI de alto rendimiento)
+# y las extras necesarias para desarrollo (watchfiles, websockets, etc.).
+fastapi[standard]==0.115.6
+sqlmodel==0.0.22
+psycopg2-binary==2.9.10
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+pydantic==2.11.10
+pydantic-settings==2.7.0
+python-multipart==0.0.20
+email-validator==2.2.0
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
+

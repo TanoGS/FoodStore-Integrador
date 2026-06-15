@@ -57,7 +57,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response, // Respuestas 2xx pasan directo
   (error) => {
-    if (error.response?.status === 401) {
+    // Ignorar 401 en rutas de validación de contraseña (no es token expirado)
+    const isPasswordValidation = error.config?.url?.includes('/cambiar-password');
+    
+    if (error.response?.status === 401 && !isPasswordValidation) {
       console.warn('⛔ [AXIOS] Token expirado o inválido. Cerrando sesión...');
       // Limpiamos el store de autenticación
       useAuthStore.getState().logout();

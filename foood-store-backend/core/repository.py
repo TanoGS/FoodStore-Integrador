@@ -31,7 +31,7 @@ class BaseRepository(Generic[ModelT]):
         - flush(): ejecuta el SQL sin commit (genera ID)
         - refresh(): sincroniza el estado del objeto con la DB
 
-        Importante: NO hace commit. Esto lo maneja el UnitOfWork.
+        NO hace commit. Esto lo maneja el UnitOfWork.
         """
         self.session.add(instance)
         self.session.flush()
@@ -42,7 +42,7 @@ class BaseRepository(Generic[ModelT]):
         """
         Marca una entidad para eliminación física.
 
-        Importante: NO hace commit. El UnitOfWork decide cuándo persistir.
+        NO hace commit. El UnitOfWork decide cuándo persistir.
         """
         self.session.delete(instance)
         self.session.flush()

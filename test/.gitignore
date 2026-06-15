@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# Entorno
+.env
+.env.local
+.env.*.local
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.tox/
+.cache
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

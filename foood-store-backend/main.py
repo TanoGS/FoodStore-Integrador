@@ -30,6 +30,7 @@ from app.modules.direccion.router import router as direccion_router
 from app.modules.catalogo.router import router as catalogo_router
 from app.modules.admin.router import router as admin_router
 from app.modules.pagos.router import router as pagos_router
+from app.modules.imagenes.router import router as imagenes_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -69,3 +70,4 @@ app.include_router(direccion_router, prefix=settings.API_V1_STR)
 app.include_router(catalogo_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(pagos_router, prefix=settings.API_V1_STR)
+app.include_router(imagenes_router, prefix=settings.API_V1_STR)

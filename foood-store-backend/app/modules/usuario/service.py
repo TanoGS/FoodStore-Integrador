@@ -123,6 +123,33 @@ class UsuarioService:
             return UsuarioPublic.model_validate(usuario)
 
     # ====================================================================
+    # 3.5. CAMBIAR CONTRASEÑA CON VERIFICACIÓN
+    # ====================================================================
+    def cambiar_password(self, usuario_id: int, password_actual: str, password_nueva: str) -> dict:
+        """
+        Permite cambiar la contraseña solo si la actual es correcta.
+        """
+        with UsuarioUnitOfWork(self._session) as uow:
+            usuario = self._session.get(Usuario, usuario_id)
+            if not usuario:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado")
+            
+            # Verificar que la contraseña actual sea correcta
+            if not verify_password(password_actual, usuario.password):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="La contraseña actual es incorrecta"
+                )
+            
+            # Actualizar contraseña
+            usuario.password = get_password_hash(password_nueva)
+            usuario.actualizado_en = datetime.now(timezone.utc)
+            uow.usuarios.add(usuario)
+            self._session.flush()
+            
+            return {"message": "Contraseña actualizada exitosamente"}
+
+    # ====================================================================
     # 4. UTILIDADES Y SOFT DELETES (Sin Cambios)
     # ====================================================================
     def obtener_usuario_por_id(self, usuario_id: int) -> UsuarioPublic:

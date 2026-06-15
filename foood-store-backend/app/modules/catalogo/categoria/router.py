@@ -10,6 +10,7 @@ from .service import CategoriaService
 router = APIRouter(prefix="/categorias", tags=["Catálogo - Categorías"])
 
 _solo_admin = Depends(RoleChecker(["ADMIN"]))
+_admin_o_stock = Depends(RoleChecker(["ADMIN", "GESTOR_STOCK"]))
 
 
 def get_service(session: Session = Depends(get_session)) -> CategoriaService:
@@ -17,9 +18,9 @@ def get_service(session: Session = Depends(get_session)) -> CategoriaService:
 
 
 @router.post("", response_model=CategoriaPublic, status_code=status.HTTP_201_CREATED,
-             dependencies=[_solo_admin])
+             dependencies=[_admin_o_stock])
 def crear_categoria(data: CategoriaCreate, svc: CategoriaService = Depends(get_service)):
-    """Crea una nueva sección para el menú. Solo ADMIN."""
+    """Crea una nueva sección para el menú. ADMIN o GESTOR_STOCK."""
     return svc.crear_categoria(data)
 
 
@@ -54,29 +55,40 @@ def obtener_categoria(categoria_id: int, svc: CategoriaService = Depends(get_ser
     return svc.obtener_categoria(categoria_id)
 
 
-@router.patch("/{categoria_id}", response_model=CategoriaPublic, dependencies=[_solo_admin])
+@router.patch("/{categoria_id}", response_model=CategoriaPublic, dependencies=[_admin_o_stock])
 def actualizar_categoria(
     categoria_id: int,
     data: CategoriaUpdate,
     svc: CategoriaService = Depends(get_service),
 ):
-    """Actualiza los campos enviados de una categoría. Solo ADMIN."""
+    """Actualiza los campos enviados de una categoría. ADMIN o GESTOR_STOCK."""
     return svc.actualizar_categoria(categoria_id, data)
 
 
+@router.patch("/{categoria_id}/visibilidad", response_model=CategoriaPublic,
+              dependencies=[_admin_o_stock])
+def toggle_visibilidad(
+    categoria_id: int,
+    activo: bool,
+    svc: CategoriaService = Depends(get_service),
+):
+    """Activa o desactiva una categoría. ADMIN o GESTOR_STOCK."""
+    return svc.actualizar_categoria(categoria_id, CategoriaUpdate(activo=activo))
+
+
 @router.patch("/{categoria_id}/reactivar", response_model=CategoriaPublic,
-              dependencies=[_solo_admin])
+              dependencies=[_admin_o_stock])
 def reactivar_categoria(
     categoria_id: int, svc: CategoriaService = Depends(get_service)
 ):
-    """Reactiva una categoría con soft-delete. Falla con 409 si su padre está eliminado. Solo ADMIN."""
+    """Reactiva una categoría con soft-delete. Falla con 409 si su padre está eliminado. ADMIN o GESTOR_STOCK."""
     return svc.reactivar_categoria(categoria_id)
 
 
 @router.delete("/{categoria_id}", status_code=status.HTTP_204_NO_CONTENT,
-               dependencies=[_solo_admin])
+               dependencies=[_admin_o_stock])
 def eliminar_categoria(
     categoria_id: int, svc: CategoriaService = Depends(get_service)
 ):
-    """Soft-delete con validación: falla con 409 si tiene hijos o productos activos. Solo ADMIN."""
+    """Soft-delete con validación: falla con 409 si tiene hijos o productos activos. ADMIN o GESTOR_STOCK."""
     svc.eliminar_categoria(categoria_id)

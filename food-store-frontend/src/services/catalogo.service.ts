@@ -26,6 +26,11 @@ export const CatalogoService = {
     return res.data;
   },
 
+  toggleVisibilidadCategoria: async (id: number, activo: boolean) => {
+    const res = await axios.patch(`/catalogo/categorias/${id}/visibilidad?activo=${activo}`);
+    return res.data;
+  },
+
   eliminarCategoria: async (id: number) => {
     await axios.delete(`/catalogo/categorias/${id}`);
   },
@@ -46,6 +51,11 @@ export const CatalogoService = {
   // Incluye los dados de baja (para el panel admin)
   getProductosTodos: async () => {
     const res = await axios.get('/catalogo/productos?incluir_eliminados=true');
+    return res.data;
+  },
+
+  getProductoById: async (id: number) => {
+    const res = await axios.get(`/catalogo/productos/${id}`);
     return res.data;
   },
 

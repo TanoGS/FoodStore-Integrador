@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings
 from typing import List
 
@@ -25,8 +26,16 @@ class Settings(BaseSettings):
     MP_NOTIFICATION_URL: str = "http://localhost:8000/api/v1/pagos/webhook"
     FRONTEND_URL:       str = "http://localhost:5173"
 
+    # ── Cloudinary ──────────────────────────────────────────────────────
+    CLOUDINARY_CLOUD_NAME:  str
+    CLOUDINARY_API_KEY:     str = "495238629622477"
+    CLOUDINARY_API_SECRET:  str
+    CLOUDINARY_FOLDER:      str = "foodstore"
+    CLOUDINARY_MAX_FILE_MB: int = 5
+
     class Config:
-        env_file = ".env"
+        # Buscar .env en la carpeta del proyecto (backend)
+        env_file = os.path.join(os.path.dirname(__file__), "..", ".env")
 
 
 settings = Settings()

@@ -25,9 +25,13 @@ class EstadoPedido(str, enum.Enum):
 
 
 class FormaPago(str, enum.Enum):
-    EFECTIVO      = "EFECTIVO"
-    TRANSFERENCIA = "TRANSFERENCIA"
-    MERCADOPAGO   = "MERCADOPAGO"
+    EFECTIVO    = "EFECTIVO"
+    MERCADOPAGO = "MERCADOPAGO"
+
+
+class TipoEntrega(str, enum.Enum):
+    EN_LOCAL = "EN_LOCAL"
+    DELIVERY = "DELIVERY"
 
 
 # ---------------------------------------------------------------------------
@@ -54,10 +58,16 @@ class Pedido(SQLModel, table=True):
     )
     forma_pago_codigo: str = Field(max_length=20)
 
+    # Tipo de entrega (EN_LOCAL o DELIVERY)
+    tipo_entrega: str = Field(
+        default=TipoEntrega.DELIVERY,
+        max_length=20,
+    )
+
     # Snapshot monetario inmutable desde creación
     subtotal:     float = Field(default=0.0, sa_type=Numeric(10, 2))
     descuento:    float = Field(default=0.0, sa_type=Numeric(10, 2))
-    costo_envio:  float = Field(default=50.0, sa_type=Numeric(10, 2))
+    costo_envio:  float = Field(default=0.0, sa_type=Numeric(10, 2))  # delivery only
     total:        float = Field(default=0.0, sa_type=Numeric(10, 2))
 
     notas: Optional[str] = Field(default=None)
@@ -77,9 +87,19 @@ class Pedido(SQLModel, table=True):
 class DetallePedido(SQLModel, table=True):
     __tablename__ = "detalles_pedido"
 
-    # PK compuesta (pedido_id, producto_id)
-    pedido_id:   int = Field(foreign_key="pedidos.id",   primary_key=True, sa_type=BigInteger)
-    producto_id: int = Field(foreign_key="productos.id", primary_key=True, sa_type=BigInteger)
+    # PK autoincremental — permite múltiples líneas del mismo producto
+    # con distinta personalización en un mismo pedido.
+    # La columna es BIGSERIAL en PostgreSQL: SQLAlchemy delega la generación
+    # del ID a la base de datos automáticamente.
+    detalle_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger(),
+            primary_key=True,
+        )
+    )
+    pedido_id:   int = Field(foreign_key="pedidos.id",   sa_type=BigInteger)
+    producto_id: int = Field(foreign_key="productos.id", sa_type=BigInteger)
 
     cantidad: int = Field(ge=1)
 
@@ -91,8 +111,13 @@ class DetallePedido(SQLModel, table=True):
     # IDs de ingredientes removidos por el cliente (solo es_removible=true)
     personalizacion: Optional[List[int]] = Field(
         default=None,
-        sa_column=Column(ARRAY(Integer), nullable=True)
+        sa_column=Column(ARRAY(Integer()), nullable=True)
     )
+
+    # NOTE: personalizacion_nombres NO es un campo de la tabla — es un atributo
+    # transient que se calcula en PedidoService al construir la respuesta.
+    # Solo existe en DetallePedidoPublic (schema Pydantic), no en este modelo ORM.
+    # No agregar como Field() — SQLModel no soporta exclude_from_dict.
 
     creado_en: datetime = Field(default_factory=_utc_now, sa_type=DateTime(timezone=True))
 

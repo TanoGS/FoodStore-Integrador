@@ -46,6 +46,13 @@ class CategoriaService:
                 categorias = uow.categorias.get_all_raiz(skip, limit)
             else:
                 categorias = uow.categorias.get_all_activos(skip, limit)
+            # Filtrar sub-categorías inactivas/eliminadas en el árbol eager-loaded
+            if not incluir_eliminados:
+                for cat in categorias:
+                    cat.subcategorias = [
+                        sub for sub in (cat.subcategorias or [])
+                        if sub.activo and sub.eliminado_en is None
+                    ]
         return [CategoriaPublic.model_validate(c) for c in categorias]
 
     # ------------------------------------------------------------------

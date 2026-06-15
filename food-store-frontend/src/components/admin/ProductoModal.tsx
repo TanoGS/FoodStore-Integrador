@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, Calculator, ArrowRight, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { X, Calculator, ArrowRight, Search, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight } from 'lucide-react';
 import { CatalogoService } from '../../services/catalogo.service';
+import { ImagePicker } from './ImagePicker';
 
 // ── Interfaces TypeScript del componente ───────────────────────────────────────────
 interface RecetaItemPayload {
@@ -24,13 +25,19 @@ export interface ProductoPayload {
 export interface ProductoEditar {
   id:                    number;
   nombre:                string;
-  descripcion?:          string;
+  descripcion?:          string | null;
   imagen_url?:           string | null;
-  stock:                 number;
+  stock_cantidad:        number;
   activo:                boolean;
   margen_ganancia:       number;
   precio:                number;
   categorias?:           { id: number; nombre: string }[];
+  receta_detallada?: {                          // nombre real que devuelve el backend
+    ingrediente_id:     number;
+    cantidad_requerida: number;
+    es_removible:       boolean;
+  }[];
+  // Backwards compat (en caso de que venga con el nombre viejo)
   ingredientes_enlaces?: {
     ingrediente_id:     number;
     cantidad_requerida: number;
@@ -41,7 +48,8 @@ export interface ProductoEditar {
 interface ProductoModalProps {
   productoEditar?: ProductoEditar | null;
   onClose: () => void;
-  onSave: (payload: ProductoPayload) => void;
+  onSave: (payload: Partial<ProductoPayload> | Record<string, any>) => void;
+  isSaving?: boolean;
 }
 
 interface IngCfg {
@@ -52,7 +60,19 @@ interface IngCfg {
 
 const INGS_POR_PAG = 10;
 
-export default function ProductoModal({ productoEditar, onClose, onSave }: ProductoModalProps) {
+// ── Helper para comparar recetas ──────────────────────────────────────────────
+function recetasIguales(a: RecetaItemPayload[], b: RecetaItemPayload[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort((x, y) => x.ingrediente_id - y.ingrediente_id);
+  const sortedB = [...b].sort((x, y) => x.ingrediente_id - y.ingrediente_id);
+  return sortedA.every((item, i) =>
+    item.ingrediente_id === sortedB[i].ingrediente_id &&
+    item.cantidad_requerida === sortedB[i].cantidad_requerida &&
+    item.es_removible === sortedB[i].es_removible
+  );
+}
+
+export default function ProductoModal({ productoEditar, onClose, onSave, isSaving }: ProductoModalProps) {
   // --- Catálogos Maestros ---
   const [categoriasDB,    setCategoriasDB]    = useState<any[]>([]);
   const [ingredientesDB,  setIngredientesDB]  = useState<any[]>([]);
@@ -78,7 +98,35 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
   // Preview de imagen: reset del error cuando cambia la URL
   const [imgPreviewError, setImgPreviewError] = useState(false);
 
-  useEffect(() => { cargarDatosMaestros(); }, []);
+  // ── Estado inicial para diff (solo edición) ──────────────────────────────
+  const [initialState, setInitialState] = useState<{
+    nombre: string;
+    descripcion: string;
+    imagen_url: string;
+    stock_cantidad: number;
+    activo: boolean;
+    margen_ganancia: number;
+    precio: number;
+    precio_es_null: boolean;
+    categoriaId: number | null;
+    receta: RecetaItemPayload[];
+  } | null>(null);
+
+  // ── Reset completo al abrir/cerrar modal ─────────────────────────────────
+  useEffect(() => {
+    if (productoEditar === undefined) return; // aún no se montó
+    cargarDatosMaestros();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productoEditar]);
+
+  // ── Cierre con Escape ───────────────────────────────────────────────────
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
   useEffect(() => { setPagIng(1); }, [filtroIng]);
   useEffect(() => { setImgPreviewError(false); }, [imagenUrl]);
 
@@ -95,7 +143,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
         setNombre(productoEditar.nombre || '');
         setDescripcion(productoEditar.descripcion || '');
         setImagenUrl(productoEditar.imagen_url || '');
-        setStock(productoEditar.stock ?? '');
+        setStock(productoEditar.stock_cantidad ?? '');
         setActivo(productoEditar.activo !== false);
         setMargenGanancia(productoEditar.margen_ganancia ?? 90);
         setPrecioManual(productoEditar.precio ?? '');
@@ -104,9 +152,12 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
           setCategoriaId(productoEditar.categorias[0].id);
         }
 
-        if (productoEditar.ingredientes_enlaces?.length) {
+        // Soporta ambos nombres: receta_detallada (backend actual) e ingredientes_enlaces (legacy)
+        const recetaEnlaces = productoEditar.receta_detallada ?? productoEditar.ingredientes_enlaces;
+
+        if (recetaEnlaces?.length) {
           const cfg: Record<number, IngCfg> = {};
-          for (const e of productoEditar.ingredientes_enlaces) {
+          for (const e of recetaEnlaces) {
             cfg[e.ingrediente_id] = {
               cantidad:     e.cantidad_requerida,
               es_removible: e.es_removible,
@@ -115,6 +166,26 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
           }
           setIngConfig(cfg);
         }
+
+        // Guardar estado inicial para diff
+        setInitialState({
+          nombre:           productoEditar.nombre || '',
+          descripcion:      productoEditar.descripcion || '',
+          imagen_url:       productoEditar.imagen_url || '',
+          stock_cantidad:   productoEditar.stock_cantidad ?? 0,
+          activo:           productoEditar.activo !== false,
+          margen_ganancia:  productoEditar.margen_ganancia ?? 90,
+          precio:           productoEditar.precio ?? 0,
+          precio_es_null:   productoEditar.precio === null,
+          categoriaId:      productoEditar.categorias?.[0]?.id ?? null,
+          receta:           (recetaEnlaces ?? [])?.map((e: any) => ({
+            ingrediente_id:     e.ingrediente_id,
+            cantidad_requerida: e.cantidad_requerida,
+            es_removible:       e.es_removible,
+          })),
+        });
+      } else {
+        setInitialState(null);
       }
     } catch (err) {
       console.error('Error cargando catálogos:', err);
@@ -199,23 +270,52 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
       return;
     }
 
-    const payload: ProductoPayload = {
-      nombre,
-      descripcion:     descripcion || null,
-      imagen_url:      imagenUrl   || null,
-      stock:           stock === '' ? 0 : Number(stock),
-      activo,
-      categoria_ids:   [categoriaId],
-      margen_ganancia: Number(margenGanancia),
-      precio_manual:   precioManual === '' ? null : Number(precioManual),
-      receta: receta.map(r => ({
+    // ── Diff: solo edición envía campos modificados ────────────────────────
+    if (initialState) {
+      const currentReceta: RecetaItemPayload[] = receta.map(r => ({
         ingrediente_id:     r.ingrediente_id,
         cantidad_requerida: r.cantidad_requerida,
         es_removible:       r.es_removible,
-      })),
-    };
+      }));
 
-    onSave(payload);
+      const payload: Record<string, any> = {};
+
+      if (nombre !== initialState.nombre)              payload.nombre = nombre;
+      if ((descripcion || '') !== initialState.descripcion) payload.descripcion = descripcion || null;
+      if ((imagenUrl || '') !== initialState.imagen_url) payload.imagen_url = imagenUrl || null;
+      if ((stock === '' ? 0 : Number(stock)) !== initialState.stock_cantidad) payload.stock_cantidad = stock === '' ? 0 : Number(stock);
+      if (Number(margenGanancia) !== initialState.margen_ganancia) payload.margen_ganancia = Number(margenGanancia);
+      if ((precioManual === '' ? null : Number(precioManual)) !== initialState.precio) payload.precio_manual = precioManual === '' ? null : Number(precioManual);
+      if (categoriaId !== initialState.categoriaId) payload.categoria_ids = [categoriaId];
+      if (activo !== initialState.activo) payload.activo = activo;
+      if (!recetasIguales(currentReceta, initialState.receta)) payload.receta = currentReceta;
+
+      // Sin cambios → cerrar sin enviar
+      if (Object.keys(payload).length === 0) {
+        onClose();
+        return;
+      }
+
+      onSave(payload);
+    } else {
+      // ── Creación: envía todo ───────────────────────────────────────────
+      const payload: ProductoPayload = {
+        nombre,
+        descripcion:     descripcion || null,
+        imagen_url:      imagenUrl   || null,
+        stock:           stock === '' ? 0 : Number(stock),
+        activo,
+        categoria_ids:   [categoriaId],
+        margen_ganancia: Number(margenGanancia),
+        precio_manual:   precioManual === '' ? null : Number(precioManual),
+        receta: receta.map(r => ({
+          ingrediente_id:     r.ingrediente_id,
+          cantidad_requerida: r.cantidad_requerida,
+          es_removible:       r.es_removible,
+        })),
+      };
+      onSave(payload);
+    }
   };
 
   const categoriaSel = categoriasDB.find(c => c.id === categoriaId);
@@ -232,14 +332,38 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-[min(95vw,1344px)] max-h-[95vh] flex flex-col overflow-hidden border border-slate-700">
+    <div
+      className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={isSaving ? undefined : onClose}
+    >
+      <div
+        className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-[min(95vw,1344px)] max-h-[95vh] flex flex-col overflow-hidden border border-slate-700"
+        onClick={e => e.stopPropagation()}
+      >
 
         {/* Cabecera */}
         <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-700 shrink-0">
-          <h3 className="font-black text-xl text-white">
-            {productoEditar ? 'Modificar Plato y Receta' : 'Creación de Nuevo Plato'}
-          </h3>
+          <div className="flex items-center gap-4">
+            <h3 className="font-black text-xl text-white">
+              {productoEditar ? 'Modificar Plato y Receta' : 'Creación de Nuevo Plato'}
+            </h3>
+            {productoEditar && (
+              <button
+                onClick={() => setActivo(a => !a)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold border transition-all ${
+                  activo
+                    ? 'bg-green-900/40 border-green-600 text-green-400 hover:bg-green-900/60'
+                    : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'
+                }`}
+                title={activo ? 'Ocultar del menú al guardar' : 'Mostrar en menú al guardar'}
+              >
+                {activo
+                  ? <ToggleRight className="w-6 h-6" />
+                  : <ToggleLeft  className="w-6 h-6" />}
+                <span>{activo ? 'Activo' : 'Oculto'}</span>
+              </button>
+            )}
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-red-400 transition-colors">
             <X className="w-6 h-6" />
           </button>
@@ -270,13 +394,11 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
                     placeholder="Dejar vacío si es ilimitado"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">URL de Imagen (Opcional)</label>
-                  <input
-                    type="url" value={imagenUrl}
-                    onChange={e => setImagenUrl(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white focus:ring-2 focus:ring-orange-500 outline-none placeholder-slate-400"
-                    placeholder="https://..."
+                <div className="col-span-2">
+                  <ImagePicker
+                    value={imagenUrl || null}
+                    onChange={(url) => setImagenUrl(url || '')}
+                    label="Imagen del producto"
                   />
                 </div>
                 <div>
@@ -532,11 +654,26 @@ export default function ProductoModal({ productoEditar, onClose, onSave }: Produ
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-700 bg-slate-800 flex justify-end items-center gap-3 shrink-0">
-          <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-400 font-bold hover:bg-slate-700 rounded-xl transition">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-5 py-2.5 text-slate-400 font-bold hover:bg-slate-700 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             Cancelar
           </button>
-          <button form="product-form" type="submit" className="px-6 py-2.5 bg-orange-600 text-white font-black rounded-xl hover:bg-orange-500 transition shadow-lg shadow-orange-600/20 flex items-center gap-2">
-            Guardar Plato <ArrowRight className="w-5 h-5" />
+          <button
+            form="product-form"
+            type="submit"
+            disabled={isSaving}
+            className="px-6 py-2.5 bg-orange-600 text-white font-black rounded-xl shadow-lg shadow-orange-600/20 flex items-center gap-2 disabled:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-60 transition"
+          >
+            {isSaving ? (
+              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+            ) : (
+              <ArrowRight className="w-5 h-5" />
+            )}
+            {isSaving ? 'Guardando...' : 'Guardar Plato'}
           </button>
         </div>
 

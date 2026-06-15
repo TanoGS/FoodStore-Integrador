@@ -68,9 +68,9 @@ export default function ProductosAdmin() {
   const invalidar = () => queryClient.invalidateQueries({ queryKey: ['productos'] });
 
   const mutGuardar = useMutation({
-    mutationFn: (payload: any) =>
-      productoEditando
-        ? CatalogoService.actualizarProducto(productoEditando.id, payload)
+    mutationFn: ({ id, payload }: { id?: number; payload: any }) =>
+      id
+        ? CatalogoService.actualizarProducto(id, payload)
         : CatalogoService.crearProducto(payload),
     onSuccess: () => { invalidar(); setIsModalOpen(false); },
     onError: (e: any) =>
@@ -99,8 +99,21 @@ export default function ProductosAdmin() {
 
   // ── Helpers UI ──────────────────────────────────────────────────────────────
   const handleFiltro = (v: string) => { setFiltroNombre(v); setPagina(1); };
-  const abrirEditar  = (p: Producto) => { setProductoEditando(p); setIsModalOpen(true); };
-  const abrirNuevo   = () => { setProductoEditando(null); setIsModalOpen(true); };
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false);
+
+  const abrirEditar = async (p: Producto) => {
+    setIsLoadingEdit(true);
+    try {
+      const completo = await CatalogoService.getProductoById(p.id);
+      setProductoEditando(completo);
+      setIsModalOpen(true);
+    } catch {
+      alert('No se pudo cargar el producto para editar.');
+    } finally {
+      setIsLoadingEdit(false);
+    }
+  };
+  const abrirNuevo = () => { setProductoEditando(null); setIsModalOpen(true); };
 
   const colSpan = puedeEditar ? 9 : 8;
 
@@ -140,6 +153,7 @@ export default function ProductosAdmin() {
         <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+              <th className="p-3 font-bold w-16">Img</th>
               <th className="p-3 font-bold">Nombre</th>
               <th className="p-3 font-bold text-right">Costo</th>
               <th className="p-3 font-bold text-right">Margen de Ganancia</th>
@@ -174,6 +188,21 @@ export default function ProductosAdmin() {
 
                 return (
                   <tr key={prod.id} className={`transition-colors ${rowCls}`}>
+
+                    <td className="p-3">
+                      {prod.imagen_url ? (
+                        <img
+                          src={prod.imagen_url}
+                          alt={prod.nombre}
+                          className="w-12 h-12 rounded-lg object-cover border border-slate-600"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-slate-500 text-lg">
+                          🍽️
+                        </div>
+                      )}
+                    </td>
 
                     <td className="p-3">
                       <span className="font-bold text-white">{prod.nombre}</span>
@@ -309,21 +338,12 @@ export default function ProductosAdmin() {
       {isModalOpen && (
         <ProductoModal
           onClose={() => setIsModalOpen(false)}
-          onSave={(payload: any) => mutGuardar.mutate(payload)}
-          productoEditar={
-            productoEditando
-              ? {
-                  id:              productoEditando.id,
-                  nombre:          productoEditando.nombre,
-                  descripcion:     productoEditando.descripcion ?? undefined,
-                  imagen_url:      productoEditando.imagen_url ?? null,
-                  stock:           productoEditando.stock_cantidad,
-                  activo:          productoEditando.activo,
-                  margen_ganancia: productoEditando.margen_ganancia,
-                  precio:          productoEditando.precio,
-                }
-              : null
-          }
+          onSave={(payload: any) => mutGuardar.mutate({
+            id: productoEditando?.id,
+            payload,
+          })}
+          productoEditar={productoEditando}
+          isSaving={mutGuardar.isPending}
         />
       )}
     </div>

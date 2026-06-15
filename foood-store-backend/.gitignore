@@ -10,6 +10,16 @@ env/
 .env
 .env.local
 .env.*.local
+.env.test       # variables de test (credenciales fixtures)
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.tox/
+.cache
+
 
 # Caché de Python
 __pycache__/

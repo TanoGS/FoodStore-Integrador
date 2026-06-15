@@ -57,9 +57,14 @@ const ESTADOS_LABELS: Record<string, string> = {
 
 // Color del badge de forma de pago
 const PAGO_CONFIG: Record<string, { color: string }> = {
-  EFECTIVO:      { color: 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50' },
-  TRANSFERENCIA: { color: 'bg-sky-900/60 text-sky-300 border border-sky-700/50' },
-  MERCADOPAGO:   { color: 'bg-amber-900/60 text-amber-300 border border-amber-700/50' },
+  EFECTIVO:    { color: 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50' },
+  MERCADOPAGO: { color: 'bg-amber-900/60 text-amber-300 border border-amber-700/50' },
+};
+
+// Badge de tipo de entrega
+const TIPO_ENTREGA_BADGE: Record<string, { label: string; cls: string }> = {
+  EN_LOCAL: { label: 'En el local', cls: 'bg-orange-900/60 text-orange-300 border border-orange-700/50' },
+  DELIVERY: { label: 'Delivery',    cls: 'bg-blue-900/60 text-blue-300 border border-blue-700/50'  },
 };
 
 // ─── Tipos del modal de motivo ────────────────────────────────────────
@@ -307,6 +312,7 @@ export default function GestorPedidos() {
                   <th className="p-3 font-bold">Pedido / Cliente</th>
                   <th className="p-3 font-bold">Fecha</th>
                   <th className="p-3 font-bold">Pago</th>
+                  <th className="p-3 font-bold hidden xl:table-cell">Entrega</th>
                   <th className="p-3 font-bold">Dirección</th>
                   <th className="p-3 font-bold text-right">Total</th>
                   <th className="p-3 font-bold">Estado</th>
@@ -362,8 +368,17 @@ export default function GestorPedidos() {
                           <span
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${pagoConfig.color}`}
                           >
-                            <CreditCard className="w-3 h-3" />
+                        <CreditCard className="w-3 h-3" />
                             {pedido.forma_pago_label}
+                          </span>
+                        </td>
+
+                        {/* Tipo de entrega */}
+                        <td className="p-3 hidden xl:table-cell">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                            TIPO_ENTREGA_BADGE[pedido.tipo_entrega]?.cls ?? 'bg-slate-800 text-slate-300'
+                          }`}>
+                            {TIPO_ENTREGA_BADGE[pedido.tipo_entrega]?.label ?? pedido.tipo_entrega}
                           </span>
                         </td>
 
@@ -507,9 +522,13 @@ export default function GestorPedidos() {
                                   </div>
                                 )}
                                 <div className="flex justify-between text-xs text-slate-500">
-                                  <span>Envío</span>
-                                  <span>${pedido.costo_envio.toFixed(2)}</span>
-                                </div>
+                              <span>Envío</span>
+                              <span>${pedido.costo_envio.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-slate-500">
+                              <span>Tipo de entrega</span>
+                              <span>{pedido.tipo_entrega_label}</span>
+                            </div>
                                 <div className="flex justify-between text-sm font-black text-slate-800 pt-1">
                                   <span>Total</span>
                                   <span>${pedido.total.toFixed(2)}</span>

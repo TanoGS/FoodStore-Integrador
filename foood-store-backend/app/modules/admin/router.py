@@ -66,7 +66,7 @@ MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
 def _rango_ultimos_meses(meses: int = 12) -> datetime:
     """Devuelve la fecha de hace N meses (inicio del mes) en UTC."""
     now = datetime.now(timezone.utc)
-    # Ir al primer día del mes N meses atrás
+   
     year = now.year
     month = now.month - meses
     while month <= 0:

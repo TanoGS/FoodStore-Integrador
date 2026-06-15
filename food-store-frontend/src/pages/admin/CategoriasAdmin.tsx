@@ -80,7 +80,7 @@ export default function CategoriasAdmin() {
 
   const mutToggleActivo = useMutation({
     mutationFn: ({ id, activo }: { id: number; activo: boolean }) =>
-      CatalogoService.actualizarCategoria(id, { activo }),
+      CatalogoService.toggleVisibilidadCategoria(id, activo),
     onSuccess: invalidar,
     onError: () => alert('Error al cambiar la visibilidad.'),
   });

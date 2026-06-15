@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional
 
 from fastapi import HTTPException, status
 from sqlmodel import Session, select
@@ -9,12 +9,14 @@ from .models import (
     HistorialEstadoPedido,
     DetallePedido,
     Pedido,
+    TipoEntrega,
 )
 from .schemas import (
     AvanzarEstadoRequest,
     PedidoCreate,
     PedidoPublic,
     HistorialEstadoPublic,
+    _TIPO_ENTREGA_LABELS,
 )
 from .unit_of_work import PedidoUnitOfWork
 from .schemas import (
@@ -23,15 +25,15 @@ from .schemas import (
     DetallePedidoPublic,
 )
 from app.modules.catalogo.producto.models import Producto
+from app.modules.catalogo.ingrediente.models import Ingrediente
 
 
 # ---------------------------------------------------------------------------
 # Labels legibles para formas de pago
 # ---------------------------------------------------------------------------
 _FORMA_PAGO_LABELS: dict[str, str] = {
-    "EFECTIVO":      "Efectivo",
-    "TRANSFERENCIA": "Transferencia",
-    "MERCADOPAGO":   "MercadoPago",
+    "EFECTIVO":    "Efectivo",
+    "MERCADOPAGO": "MercadoPago",
 }
 
 
@@ -78,6 +80,9 @@ class PedidoService:
             # 1. Validar productos y construir snapshots (precio + nombre congelados)
             detalles: List[DetallePedido] = []
             subtotal = 0.0
+            # Mapa temporal producto_id → nombres de ingredientes removidos.
+            # Se usa para enriquecer la respuesta Pydantic (no se persiste en la DB).
+            nombres_por_producto: Dict[int, List[str]] = {}
 
             for item in datos.detalles:
                 producto = self._session.get(Producto, item.producto_id)
@@ -87,24 +92,56 @@ class PedidoService:
                         detail=f"Producto {item.producto_id} no disponible.",
                     )
 
+                # Validar personalizaciones (ingredientes removidos)
+                if item.personalizacion:
+                    ingredientes_producto = {
+                        e.ingrediente_id: e for e in producto.ingredientes_enlaces
+                    }
+                    for ing_id in item.personalizacion:
+                        enlace = ingredientes_producto.get(ing_id)
+                        if enlace is None:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"El ingrediente {ing_id} no pertenece al producto.",
+                            )
+                        if not enlace.es_removible:
+                            nombre = getattr(enlace.ingrediente, "nombre", str(ing_id))
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"El ingrediente '{nombre}' no es removible.",
+                            )
+
                 precio = float(producto.precio)
                 sub = round(precio * item.cantidad, 2)
                 subtotal += sub
 
-                detalles.append(
-                    DetallePedido(
-                        producto_id=item.producto_id,
-                        cantidad=item.cantidad,
-                        nombre_snapshot=producto.nombre,
-                        precio_snapshot=precio,
-                        subtotal_snap=sub,
-                        personalizacion=item.personalizacion,
-                    )
+                # Construir lista de nombres de ingredientes removidos
+                nombres_removidos = None
+                if item.personalizacion:
+                    nombres_removidos = [
+                        ingredientes_producto[pid].ingrediente.nombre
+                        for pid in item.personalizacion
+                        if pid in ingredientes_producto
+                    ]
+
+                # Guardar nombres removidos en el mapa temporal para uso en la respuesta
+                if nombres_removidos:
+                    nombres_por_producto[item.producto_id] = nombres_removidos
+
+                detalle = DetallePedido(
+                    producto_id=item.producto_id,
+                    cantidad=item.cantidad,
+                    nombre_snapshot=producto.nombre,
+                    precio_snapshot=precio,
+                    subtotal_snap=sub,
+                    personalizacion=item.personalizacion,
                 )
+                detalles.append(detalle)
 
             # 2. Calcular totales
             descuento = 0.0
-            costo_envio = 50.0
+            # El costo de envío aplica SOLO para delivery
+            costo_envio = 50.0 if datos.tipo_entrega == TipoEntrega.DELIVERY else 0.0
             total = round(subtotal - descuento + costo_envio, 2)
 
             # 3. Crear el pedido en estado PENDIENTE.
@@ -119,6 +156,7 @@ class PedidoService:
                 direccion_id=datos.direccion_id,
                 estado_codigo=EstadoPedido.PENDIENTE,
                 forma_pago_codigo=datos.forma_pago_codigo,
+                tipo_entrega=datos.tipo_entrega.value,
                 subtotal=subtotal,
                 descuento=descuento,
                 costo_envio=costo_envio,
@@ -147,8 +185,17 @@ class PedidoService:
             self._session.flush()
             self._session.refresh(pedido)
             self._session.refresh(historial)
+
+            # Construir la respuesta Pydantic y enriquecer con los nombres
+            # de ingredientes removidos usando el mapa temporal.
+            response = PedidoPublic.model_validate(pedido)
+            for detalle_pyd in response.detalles:
+                detalle_pyd.personalizacion_nombres = nombres_por_producto.get(
+                    detalle_pyd.producto_id
+                )
+
             return PedidoCambioResult(
-                pedido=PedidoPublic.model_validate(pedido),
+                pedido=response,
                 historial=HistorialEstadoPublic.model_validate(historial),
             )
 
@@ -187,6 +234,10 @@ class PedidoService:
                     detail="El motivo es obligatorio al cancelar.",
                 )
 
+            # Descontar stock al confirmar el pedido
+            if estado_nuevo == EstadoPedido.CONFIRMADO.value:
+                self._descontar_stock(pedido)
+
             # Actualizar estado y persistir
             pedido.estado_codigo = estado_nuevo
             pedido.actualizado_en = datetime.now(timezone.utc)
@@ -205,8 +256,10 @@ class PedidoService:
             self._session.flush()
             self._session.refresh(pedido)
             self._session.refresh(historial)
+            response = PedidoPublic.model_validate(pedido)
+            self._enriquecer_personalizaciones([response])
             return PedidoCambioResult(
-                pedido=PedidoPublic.model_validate(pedido),
+                pedido=response,
                 historial=HistorialEstadoPublic.model_validate(historial),
             )
 
@@ -255,6 +308,11 @@ class PedidoService:
                     detail=f"No se puede cancelar desde el estado {estado_actual}.",
                 )
 
+            # Devolver stock si el pedido ya estaba confirmado
+            # (stock solo se descuenta al pasar a CONFIRMADO)
+            if estado_actual != EstadoPedido.PENDIENTE.value:
+                self._devolver_stock(pedido)
+
             # Actualizar estado
             pedido.estado_codigo = EstadoPedido.CANCELADO
             pedido.actualizado_en = datetime.now(timezone.utc)
@@ -273,8 +331,10 @@ class PedidoService:
             self._session.flush()
             self._session.refresh(pedido)
             self._session.refresh(historial)
+            response = PedidoPublic.model_validate(pedido)
+            self._enriquecer_personalizaciones([response])
             return PedidoCambioResult(
-                pedido=PedidoPublic.model_validate(pedido),
+                pedido=response,
                 historial=HistorialEstadoPublic.model_validate(historial),
             )
 
@@ -304,6 +364,7 @@ class PedidoService:
                 total = uow.pedidos.count_activos_por_usuario(usuario_id)
 
             pedidos_pydantic = [PedidoPublic.model_validate(p) for p in pedidos_orm]
+            self._enriquecer_personalizaciones(pedidos_pydantic)
             return {"data": pedidos_pydantic, "total": total}
 
     # ====================================================================
@@ -330,7 +391,9 @@ class PedidoService:
                     detail="No tienes permiso para ver este pedido.",
                 )
 
-            return PedidoPublic.model_validate(pedido)
+            response = PedidoPublic.model_validate(pedido)
+            self._enriquecer_personalizaciones([response])
+            return response
 
     # ====================================================================
     # 6. OBTENER HISTORIAL DE UN PEDIDO
@@ -357,6 +420,7 @@ class PedidoService:
             pedidos_orm = uow.pedidos.get_all_incluyendo_eliminados(offset, limit)
             total = uow.pedidos.count_total()
             pedidos_pydantic = [PedidoPublic.model_validate(p) for p in pedidos_orm]
+            self._enriquecer_personalizaciones(pedidos_pydantic)
             return {"data": pedidos_pydantic, "total": total}
 
     # ====================================================================
@@ -368,6 +432,77 @@ class PedidoService:
         sobre pedidos (ADMIN, GESTOR_PEDIDOS, CAJERO, COCINA).
         """
         return any(r in roles for r in _ROLES_STAFF_PEDIDOS)
+
+    # ====================================================================
+    # 10. HELPER: ENRIQUECER PERSONALIZACIONES CON NOMBRES LEGIBLES
+    # ====================================================================
+    def _enriquecer_personalizaciones(self, pedidos: List[PedidoPublic]) -> None:
+        """
+        Para cada detalle de cada pedido, resuelve los IDs de personalizacion
+        a nombres legibles consultando Producto + ProductoIngrediente.
+        Modifica in-place el campo personalizacion_nombres de cada DetallePedidoPublic.
+
+        Se aplica a TODOS los endpoints que devuelven PedidoPublic para que
+        la cocina y cualquier otra vista puedan mostrar 'Sin: Cebolla, Tomate'
+        en lugar de 'Sin: 1 ingrediente(s)'.
+        """
+        producto_ids: set[int] = {
+            d.producto_id
+            for p in pedidos
+            for d in p.detalles
+            if d.personalizacion
+        }
+        if not producto_ids:
+            return
+
+        nombre_map: dict[int, dict[int, str]] = {}
+        for pid in producto_ids:
+            producto = self._session.get(Producto, pid)
+            if not producto:
+                continue
+            nombre_map[pid] = {
+                enlace.ingrediente_id: getattr(enlace.ingrediente, 'nombre', str(enlace.ingrediente_id))
+                for enlace in producto.ingredientes_enlaces
+            }
+
+        for p in pedidos:
+            for d in p.detalles:
+                if d.personalizacion:
+                    nombres = nombre_map.get(d.producto_id, {})
+                    d.personalizacion_nombres = [
+                        nombres[i] for i in d.personalizacion if i in nombres
+                    ] or None
+
+    def _enriquecer_personalizaciones_admin(
+        self, detalles: List[DetallePedidoPublic]
+    ) -> None:
+        """
+        Versión del helper de enriquecimiento para DetallePedidoPublic (PedidoAdmin).
+        Resuelve IDs de ingredientes removidos a nombres legibles.
+        Modifica in-place personalizacion_nombres de cada detalle.
+        """
+        producto_ids: set[int] = {
+            d.producto_id for d in detalles if d.personalizacion
+        }
+        if not producto_ids:
+            return
+
+        nombre_map: dict[int, dict[int, str]] = {}
+        for pid in producto_ids:
+            producto = self._session.get(Producto, pid)
+            if not producto:
+                continue
+            nombre_map[pid] = {
+                enlace.ingrediente_id: getattr(enlace.ingrediente, 'nombre', str(enlace.ingrediente_id))
+                for enlace in producto.ingredientes_enlaces
+            }
+
+        for d in detalles:
+            if d.personalizacion:
+                nombres = nombre_map.get(d.producto_id, {})
+                d.personalizacion_nombres = [
+                    nombres[i] for i in d.personalizacion if i in nombres
+                ] or None
 
     def _verificar_acceso_pedido(
         self,
@@ -424,6 +559,10 @@ class PedidoService:
         except Exception:
             detalles = []
 
+        # Enriquecer personalizaciones en los detalles del PedidoAdmin
+        if detalles:
+            self._enriquecer_personalizaciones_admin(detalles)
+
         return PedidoAdmin(
             id=pedido.id,
             usuario_id=pedido.usuario_id,
@@ -435,6 +574,10 @@ class PedidoService:
             forma_pago_codigo=pedido.forma_pago_codigo,
             forma_pago_label=_FORMA_PAGO_LABELS.get(
                 pedido.forma_pago_codigo, pedido.forma_pago_codigo
+            ),
+            tipo_entrega=pedido.tipo_entrega,
+            tipo_entrega_label=_TIPO_ENTREGA_LABELS.get(
+                pedido.tipo_entrega, pedido.tipo_entrega
             ),
             subtotal=pedido.subtotal,
             descuento=pedido.descuento,
@@ -476,3 +619,169 @@ class PedidoService:
 
             pedidos_admin = [self._construir_pedido_admin(p) for p in pedidos_orm]
             return {"data": pedidos_admin, "total": total}
+
+    # ====================================================================
+    # STOCK — DESCUENTO Y DEVOLUCIÓN DE INGREDIENTES/PRODUCTOS
+    # ====================================================================
+
+    def _descontar_stock(self, pedido: Pedido) -> List[dict]:
+        """
+        Descuenta stock de productos e ingredientes al confirmar un pedido.
+        Se llama cuando el pedido pasa a CONFIRMADO.
+
+        Lógica:
+        - Por cada detalle: producto.stock_cantidad -= cantidad
+        - Por cada ingrediente requerido (no removido): ingrediente.stock -= cantidad_requerida * cantidad
+
+        Returns:
+            Lista de dicts con {producto/ingrediente_id, tipo, nombre, stock_anterior, stock_nuevo}
+            para construir el mensaje de notificación.
+        """
+        cambios: List[dict] = []
+
+        for detalle in pedido.detalles:
+            producto = self._session.get(Producto, detalle.producto_id)
+            if not producto:
+                continue
+
+            # Descontar stock del producto
+            stock_anterior_prod = producto.stock_cantidad
+            producto.stock_cantidad = max(0, producto.stock_cantidad - detalle.cantidad)
+            self._session.add(producto)
+            cambios.append({
+                "tipo": "PRODUCTO",
+                "id": producto.id,
+                "nombre": producto.nombre,
+                "stock_anterior": stock_anterior_prod,
+                "stock_nuevo": producto.stock_cantidad,
+            })
+
+            # Obtener mapa de ingredientes removidos para este detalle
+            removidos = set(detalle.personalizacion or [])
+
+            # Descontar ingredientes requeridos (excepto los removidos por el cliente)
+            for enlace in producto.ingredientes_enlaces:
+                if enlace.ingrediente_id in removidos:
+                    # El cliente removió este ingrediente, no se consume
+                    continue
+
+                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
+                if not ingrediente:
+                    continue
+
+                cantidad_a_restar = float(enlace.cantidad_requerida) * detalle.cantidad
+                stock_anterior_ing = float(ingrediente.stock)
+                ingrediente.stock = max(0.0, float(ingrediente.stock) - cantidad_a_restar)
+                self._session.add(ingrediente)
+                cambios.append({
+                    "tipo": "INGREDIENTE",
+                    "id": ingrediente.id,
+                    "nombre": ingrediente.nombre,
+                    "stock_anterior": stock_anterior_ing,
+                    "stock_nuevo": float(ingrediente.stock),
+                })
+
+        return cambios
+
+    def _devolver_stock(self, pedido: Pedido) -> List[dict]:
+        """
+        Devuelve stock de productos e ingredientes al cancelar un pedido confirmado.
+        Se llama cuando se cancela un pedido que ya estaba CONFIRMADO, EN_PREPARACION
+        o EN_CAMINO (el stock ya fue descontado).
+
+        Lógica inversa a _descontar_stock:
+        - producto.stock_cantidad += cantidad
+        - ingrediente.stock += cantidad_requerida * cantidad
+        """
+        cambios: List[dict] = []
+
+        for detalle in pedido.detalles:
+            producto = self._session.get(Producto, detalle.producto_id)
+            if not producto:
+                continue
+
+            # Devolver stock del producto
+            stock_anterior_prod = producto.stock_cantidad
+            producto.stock_cantidad += detalle.cantidad
+            self._session.add(producto)
+            cambios.append({
+                "tipo": "PRODUCTO",
+                "id": producto.id,
+                "nombre": producto.nombre,
+                "stock_anterior": stock_anterior_prod,
+                "stock_nuevo": producto.stock_cantidad,
+            })
+
+            # Obtener mapa de ingredientes removidos para este detalle
+            removidos = set(detalle.personalizacion or [])
+
+            # Devolver ingredientes requeridos (excepto los removidos por el cliente)
+            for enlace in producto.ingredientes_enlaces:
+                if enlace.ingrediente_id in removidos:
+                    continue
+
+                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
+                if not ingrediente:
+                    continue
+
+                cantidad_a_devolver = float(enlace.cantidad_requerida) * detalle.cantidad
+                stock_anterior_ing = float(ingrediente.stock)
+                ingrediente.stock = float(ingrediente.stock) + cantidad_a_devolver
+                self._session.add(ingrediente)
+                cambios.append({
+                    "tipo": "INGREDIENTE",
+                    "id": ingrediente.id,
+                    "nombre": ingrediente.nombre,
+                    "stock_anterior": stock_anterior_ing,
+                    "stock_nuevo": float(ingrediente.stock),
+                })
+
+        return cambios
+
+    def _obtener_resumen_stock(self, pedido: Pedido) -> List[dict]:
+        """
+        Retorna una预览 del impacto en stock sin modificar nada.
+        Útil para validar disponibilidad antes de confirmar.
+        """
+        resumen: List[dict] = []
+
+        for detalle in pedido.detalles:
+            producto = self._session.get(Producto, detalle.producto_id)
+            if not producto:
+                continue
+
+            removidos = set(detalle.personalizacion or [])
+
+            # Producto
+            if producto.stock_cantidad < detalle.cantidad:
+                resumen.append({
+                    "tipo": "PRODUCTO",
+                    "id": producto.id,
+                    "nombre": producto.nombre,
+                    "requerido": detalle.cantidad,
+                    "disponible": producto.stock_cantidad,
+                    "ok": False,
+                })
+
+            # Ingredientes
+            for enlace in producto.ingredientes_enlaces:
+                if enlace.ingrediente_id in removidos:
+                    continue
+
+                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
+                if not ingrediente:
+                    continue
+
+                requerido = float(enlace.cantidad_requerida) * detalle.cantidad
+                disponible = float(ingrediente.stock)
+                if disponible < requerido:
+                    resumen.append({
+                        "tipo": "INGREDIENTE",
+                        "id": ingrediente.id,
+                        "nombre": ingrediente.nombre,
+                        "requerido": requerido,
+                        "disponible": disponible,
+                        "ok": False,
+                    })
+
+        return resumen

@@ -36,5 +36,6 @@ class Producto(SQLModel, table=True):
         back_populates="productos", link_model=ProductoCategoria
     )
     ingredientes_enlaces: List[ProductoIngrediente] = Relationship(
-        back_populates="producto"
+        back_populates="producto",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )

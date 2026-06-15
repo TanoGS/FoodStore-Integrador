@@ -8,23 +8,36 @@ export default function Register() {
     apellido: '',
     email: '',
     password: '',
-    rol: 'CLIENTE' // Forzamos a que todo el que se registre por aquí sea CLIENTE
+    cel: '',
+    rol: 'CLIENTE'
   });
-  
+
   const [error, setError] = useState('');
+  const [celError, setCelError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const validarCelular = (valor: string): string => {
+    const limpio = valor.replace(/\D/g, '');
+    if (!valor.trim()) return 'El celular es obligatorio';
+    if (limpio.length < 10) return 'Debe tener al menos 10 dígitos';
+    if (limpio.length > 15) return 'Debe tener como máximo 15 dígitos';
+    return '';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setCelError('');
+    const err = validarCelular(formData.cel);
+    if (err) { setCelError(err); return; }
     setLoading(true);
 
     try {
-      // Usamos el mismo servicio que creaste para el panel de Admin
+      // servicio para el panel de Admin
       await UsuarioService.crear(formData);
       
-      // Si sale bien, lo mandamos al login para que inicie sesión
+     
       alert('¡Cuenta creada con éxito! Por favor, inicia sesión.');
       navigate('/login');
       
@@ -90,6 +103,21 @@ export default function Register() {
               className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
               placeholder="ejemplo@correo.com"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Celular</label>
+            <input
+              type="tel"
+              required
+              value={formData.cel}
+              onChange={(e) => { setFormData({...formData, cel: e.target.value}); setCelError(''); }}
+              className={`w-full px-4 py-3 rounded-xl border transition-colors focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${celError ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+              placeholder="Ej: 11 5123-4567"
+            />
+            {celError && (
+              <p className="text-red-500 text-xs mt-1">{celError}</p>
+            )}
           </div>
 
           <div>

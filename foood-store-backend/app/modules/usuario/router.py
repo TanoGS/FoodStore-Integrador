@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Response, Query
+from fastapi import APIRouter, Depends, status, Response, Query, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session
 from typing import List, Optional
@@ -64,6 +64,38 @@ def actualizar_mi_perfil(
 ):
     """Permite al usuario logueado actualizar su propia información."""
     return svc.actualizar_usuario(int(current_user.id), data)
+
+
+@router.post("/me/cambiar-password", summary="Cambiar contraseña con verificación")
+def cambiar_password(
+    body: dict,
+    current_user: TokenData = requiere_auth,
+    svc: UsuarioService = Depends(get_usuario_service)
+):
+    """
+    Permite al usuario cambiar su contraseña.
+    Requiere la contraseña actual para verificar identidad.
+    """
+    password_actual = body.get("password_actual")
+    password_nueva = body.get("password_nueva")
+    
+    if not password_actual or not password_nueva:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Se requiere password_actual y password_nueva"
+        )
+    
+    if len(password_nueva) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe tener al menos 6 caracteres"
+        )
+    
+    return svc.cambiar_password(
+        usuario_id=int(current_user.id),
+        password_actual=password_actual,
+        password_nueva=password_nueva
+    )
 
 
 # ==============================================================================

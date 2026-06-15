@@ -126,7 +126,11 @@ class ProductoService:
 
             # Si cambia la receta, recalcular escandallo
             if "receta" in update_data:
+                # Con cascade="all, delete-orphan" en el modelo, .clear()
+                # elimina los hijos de la DB automáticamente al hacer flush/commit
                 producto.ingredientes_enlaces.clear()
+                self._session.flush()
+
                 costo_total = 0.0
                 for item in data.receta:
                     ing = uow.ingredientes.get_activo(item.ingrediente_id)

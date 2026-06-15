@@ -8,7 +8,8 @@ export interface ProductoCart {
   precio_base: number;
   imagen_url?: string | null;
   categoria_nombre?: string;
-  opciones_seleccionadas?: any[]; 
+  // Personalización: ingredientes removidos por el cliente
+  personalizacion?: { id: number; nombre: string }[];
   subtotal: number;
 }
 
@@ -19,13 +20,13 @@ export interface CartItem {
 
 interface CartState {
   items: CartItem[];
-  
+
   // Acciones
   addItem: (producto: ProductoCart, cantidad?: number) => void;
   removeItem: (productoId: number) => void;
   updateQuantity: (productoId: number, cantidad: number) => void;
   clearCart: () => void;
-  
+
   // Getters computados
   getTotalItems: () => number;
   getTotalPrice: () => number;
@@ -37,15 +38,29 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
         items: [],
 
-        // 1. Agregar un producto (si ya existe, suma la cantidad)
+        // 1. Agregar un producto (si ya existe CON LA MISMA personalización, suma cantidad;
+        // si tiene personalización distinta, agrega como item separado)
         addItem: (producto, cantidad = 1) => {
           const currentItems = get().items;
-          const existingItem = currentItems.find(item => item.producto.id === producto.id);
+          // Buscar item existente con mismo productoId Y misma personalización
+          const samePersonalization = (
+            a?: { id: number; nombre: string }[],
+            b?: { id: number; nombre: string }[]
+          ) => {
+            const la = a ?? [];
+            const lb = b ?? [];
+            return la.length === lb.length && la.every(v => lb.some(x => x.id === v.id)) && lb.every(v => la.some(x => x.id === v.id));
+          };
+          const existingItem = currentItems.find(item =>
+            item.producto.id === producto.id &&
+            samePersonalization(item.producto.personalizacion, producto.personalizacion)
+          );
 
           if (existingItem) {
             set({
-              items: currentItems.map(item => 
-                item.producto.id === producto.id 
+              items: currentItems.map(item =>
+                item.producto.id === producto.id &&
+                samePersonalization(item.producto.personalizacion, producto.personalizacion)
                   ? { ...item, cantidad: item.cantidad + cantidad }
                   : item
               )
@@ -67,7 +82,7 @@ export const useCartStore = create<CartState>()(
             return;
           }
           set({
-            items: get().items.map(item => 
+            items: get().items.map(item =>
               item.producto.id === productoId ? { ...item, cantidad } : item
             )
           });

@@ -59,6 +59,7 @@ class CategoriaRepository(BaseRepository[Categoria]):
             .where(
                 Categoria.parent_id == None,  # noqa: E711
                 Categoria.eliminado_en == None,  # noqa: E711
+                Categoria.activo == True,
             )
             .offset(skip)
             .limit(limit)
@@ -68,7 +69,10 @@ class CategoriaRepository(BaseRepository[Categoria]):
         return self.session.exec(
             select(Categoria)
             .options(selectinload(Categoria.subcategorias))
-            .where(Categoria.eliminado_en == None)  # noqa: E711
+            .where(
+                Categoria.eliminado_en == None,  # noqa: E711
+                Categoria.activo == True,
+            )
             .offset(skip)
             .limit(limit)
         ).all()
@@ -83,6 +87,7 @@ class CategoriaRepository(BaseRepository[Categoria]):
             .where(
                 Categoria.parent_id == parent_id,
                 Categoria.eliminado_en == None,  # noqa: E711
+                Categoria.activo == True,
             )
             .offset(skip)
             .limit(limit)
@@ -95,6 +100,7 @@ class CategoriaRepository(BaseRepository[Categoria]):
             .where(
                 Categoria.parent_id == categoria_id,
                 Categoria.eliminado_en == None,  # noqa: E711
+                Categoria.activo == True,
             )
         ).first()
         return result is not None

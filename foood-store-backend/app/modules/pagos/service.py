@@ -81,12 +81,9 @@ class PagoService:
         # 4. Crear la preference en MP (si hay SDK configurado)
         if self._sdk:
             try:
-                # Construir URLs de retorno usando FRONTEND_URL del settings
-                frontend_base = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
-                pedido_url = f"{frontend_base}/pedido-exitoso/{pedido.id}"
-                
-                logger.info(f"[MP] FRONTEND_URL={frontend_base}, constructing back_urls...")
-                
+                # Calcular URL publica del backend (vía ngrok) a partir de MP_NOTIFICATION_URL
+                backend_public_url = settings.MP_NOTIFICATION_URL.replace("/api/v1/pagos/webhook", "")
+
                 preference_data = {
                     "items": [
                         {
@@ -99,20 +96,20 @@ class PagoService:
                     ],
                     "external_reference": external_ref,
                     "notification_url": settings.MP_NOTIFICATION_URL,
+                    # Las back_urls apuntan al BACKEND (vía ngrok), no al frontend.
+                    # El backend luego redirige al frontend local.
                     "back_urls": {
-                        "success": f"{pedido_url}?status=approved",
-                        "failure": f"{pedido_url}?status=rejected",
-                        "pending": f"{pedido_url}?status=pending",
+                        "success": f"{backend_public_url}/api/v1/pagos/redirect/success?pedido_id={pedido.id}",
+                        "failure": f"{backend_public_url}/api/v1/pagos/redirect/failure?pedido_id={pedido.id}",
+                        "pending": f"{backend_public_url}/api/v1/pagos/redirect/pending?pedido_id={pedido.id}",
                     },
-                    # NOTA: No usamos auto_return porque requiere back_urls en ciertos contextos
-                    # El frontend maneja la redirección después del pago
+                    # "auto_return": "approved",  # Comentado: MP sandbox queda atascado en error page del 3DS
+                    # El usuario debe hacer click en "Volver al sitio" para regresar al backend
                 }
-                
-                logger.info(f"[MP] Creating preference with data: {preference_data}")
-                
+
                 result = self._sdk.preference().create(preference_data)
                 status = result.get("status")
-                
+
                 if status in (200, 201):
                     pref = result["response"]
                     pago.preference_id = pref.get("id")
@@ -138,26 +135,82 @@ class PagoService:
     # ─────────────────────────────────────────────────────────────────────
     def procesar_webhook(self, data: dict) -> dict:
         """
-        Recibe notificación de MercadoPago (topic=payment).
-        Consulta el pago, actualiza el estado y avanza el pedido.
+        Recibe notificación de MercadoPago.
+        Maneja dos tipos de topic:
+        - topic=payment        → payment_id viene directo en data["data"]["id"]
+        - topic=merchant_order → hay que consultar la merchant_order para obtener
+                                  los payment_ids dentro de response["payments"]
         """
         if not self._sdk:
             logger.warning("Webhook recibido pero SDK de MP no configurado")
             return {"status": "ok", "msg": "SDK no configurado"}
 
-        # Extraer payment_id del payload
-        payment_id = None
-        if isinstance(data, dict):
-            if "data" in data and isinstance(data["data"], dict):
-                payment_id = data["data"].get("id")
-            elif "id" in data:
-                payment_id = data["id"]
+        if not isinstance(data, dict):
+            logger.warning(f"Webhook con data inválida: {data}")
+            return {"status": "ok", "msg": "data inválida"}
 
-        if not payment_id:
-            logger.warning(f"Webhook sin payment_id: {data}")
-            return {"status": "ok", "msg": "sin payment_id"}
+        topic = data.get("topic")
+        logger.info(f"[MP] Webhook recibido: topic={topic}, data_keys={list(data.keys())}")
 
-        # Consultar el pago en MP
+        # ── Topic: payment directo ──────────────────────────────────────
+        if topic == "payment":
+            payment_id = data.get("data", {}).get("id") or data.get("id")
+            if not payment_id:
+                logger.warning(f"Webhook topic=payment sin payment_id: {data}")
+                return {"status": "ok", "msg": "sin payment_id"}
+            return self._procesar_payment_id(payment_id)
+
+        # ── Topic: merchant_order ──────────────────────────────────────
+        if topic == "merchant_order":
+            resource_url = data.get("resource")
+            if not resource_url:
+                logger.warning(f"Webhook topic=merchant_order sin resource: {data}")
+                return {"status": "ok", "msg": "sin resource"}
+
+            # Extraer el ID de la merchant_order desde la URL
+            # resource → "https://api.mercadolibre.com/merchant_orders/12345678"
+            try:
+                merchant_order_id = int(resource_url.rstrip("/").split("/")[-1])
+            except (ValueError, IndexError):
+                logger.warning(f"No se pudo extraer merchant_order_id de: {resource_url}")
+                return {"status": "ok", "msg": "merchant_order_id inválido"}
+
+            logger.info(f"[MP] Consultando merchant_order {merchant_order_id}")
+            try:
+                mo_response = self._sdk.merchant_order().get(merchant_order_id)
+                if mo_response.get("status") != 200:
+                    logger.error(f"Error consultando merchant_order {merchant_order_id}: {mo_response}")
+                    return {"status": "ok", "msg": "error consultando merchant_order"}
+                merchant_order = mo_response["response"]
+            except Exception as e:
+                logger.error(f"Excepción consultando merchant_order {merchant_order_id}: {e}")
+                return {"status": "ok", "msg": str(e)}
+
+            # Iterar sobre todos los payments dentro de la merchant_order
+            payments = merchant_order.get("payments", [])
+            if not payments:
+                logger.info(f"[MP] merchant_order {merchant_order_id} sin payments aún")
+                return {"status": "ok", "msg": "sin payments en merchant_order"}
+
+            logger.info(f"[MP] merchant_order {merchant_order_id} tiene {len(payments)} payment(s)")
+            results = []
+            for pay_info in payments:
+                pid = pay_info.get("id")
+                if pid:
+                    r = self._procesar_payment_id(pid)
+                    results.append(r)
+
+            return {"status": "ok", "merchant_order_id": merchant_order_id, "results": results}
+
+        # ── Topic desconocido ──────────────────────────────────────────
+        logger.info(f"[MP] Topic '{topic}' ignorado (no es payment ni merchant_order)")
+        return {"status": "ok", "msg": f"topic '{topic}' no soportado"}
+
+    def _procesar_payment_id(self, payment_id: int) -> dict:
+        """
+        Consulta un payment en MP por su ID, actualiza el registro Pago
+        y avanza el pedido a CONFIRMADO si corresponde.
+        """
         try:
             mp_payment = self._sdk.payment().get(payment_id)
             if mp_payment.get("status") != 200:
@@ -186,30 +239,41 @@ class PagoService:
             pago.payment_method_id = payment_info.get("payment_method_id")
             pago.actualizado_en = _utc_now()
 
-            # Si fue aprobado, avanzar el pedido a CONFIRMADO
+            # Si fue aprobado, avanzar el pedido a CONFIRMADO solo si es DELIVERY.
+            # Para EN_LOCAL el cajero debe confirmar presencialmente (validar pago en caja).
             if pago.mp_status == "approved":
                 pedido = self._session.get(Pedido, pago.pedido_id)
                 if pedido and pedido.estado_codigo == "PENDIENTE":
-                    estado_anterior = pedido.estado_codigo
-                    pedido.estado_codigo = "CONFIRMADO"
-                    pedido.actualizado_en = _utc_now()
+                    if pedido.tipo_entrega == "DELIVERY":
+                        estado_anterior = pedido.estado_codigo
+                        pedido.estado_codigo = "CONFIRMADO"
+                        pedido.actualizado_en = _utc_now()
 
-                    # Insertar historial (append-only)
-                    historial = HistorialEstadoPedido(
-                        pedido_id=pedido.id,
-                        estado_desde=estado_anterior,
-                        estado_hacia="CONFIRMADO",
-                        usuario_id=None,  # NULL = sistema (webhook)
-                        motivo="Pago aprobado por MercadoPago",
-                    )
-                    self._session.add(historial)
+                        historial = HistorialEstadoPedido(
+                            pedido_id=pedido.id,
+                            estado_desde=estado_anterior,
+                            estado_hacia="CONFIRMADO",
+                            usuario_id=None,
+                            motivo="Pago aprobado por MercadoPago",
+                        )
+                        self._session.add(historial)
+                        logger.info(
+                            f"[MP] Pedido {pedido.id} avanzar a CONFIRMADO "
+                            f"(tipo_entrega=DELIVERY, payment_id={payment_id})"
+                        )
+                    else:
+                        # EN_LOCAL: queda PENDIENTE para confirmación del cajero en el local
+                        logger.info(
+                            f"[MP] Pedido {pedido.id} pago aprobado pero tipo_entrega=EN_LOCAL "
+                            f"→ queda PENDIENTE para confirmación del cajero"
+                        )
 
             self._session.add(pago)
             self._session.commit()
 
             return {"status": "ok", "pago_id": pago.id, "mp_status": pago.mp_status}
         except Exception as e:
-            logger.error(f"Error procesando webhook: {e}")
+            logger.error(f"Error en _procesar_payment_id({payment_id}): {e}", exc_info=True)
             return {"status": "ok", "msg": str(e)}
 
     # ─────────────────────────────────────────────────────────────────────

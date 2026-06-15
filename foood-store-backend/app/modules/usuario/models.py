@@ -90,7 +90,7 @@ class Usuario(SQLModel, table=True):
     password: str = Field(max_length=255)
     nombre: str = Field(max_length=50)
     apellido: str = Field(max_length=50)
-    cel: Optional[str] = Field(default=None, max_length=20)
+    cel: str = Field(max_length=20)
     activo: bool = Field(default=True)
     
     creado_en: datetime = Field(default_factory=datetime.utcnow)

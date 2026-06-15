@@ -26,9 +26,10 @@ const ADMIN_ROLES = ['ADMIN', 'GESTOR_STOCK', 'GESTOR_PEDIDOS', 'COCINA', 'CAJER
 
 /**
  * Redirige según el rol principal del usuario cuando entra a /admin:
- *  - COCINA  → /admin/cocina   (KDS directo)
- *  - CAJERO  → /admin/cajero   (Caja directo)
- *  - ADMIN / GESTOR_* → se queda en el Dashboard con gráficos
+ *  - COCINA      → /admin/cocina     (KDS directo)
+ *  - CAJERO      → /admin/cajero    (Caja directo)
+ *  - GESTOR_STOCK→ /admin/productos  (Gestión de stock)
+ *  - ADMIN / GESTOR_PEDIDOS → Dashboard con gráficos
  */
 function AdminIndexRedirect() {
   const { user } = useAuthStore();
@@ -37,7 +38,6 @@ function AdminIndexRedirect() {
   useEffect(() => {
     const roles = (user?.roles ?? []).map((r: any) => r.codigo || r.rol_codigo);
 
-    // Roles operativos → van directo a su vista
     if (roles.includes('COCINA')) {
       navigate('/admin/cocina', { replace: true });
       return;
@@ -46,9 +46,12 @@ function AdminIndexRedirect() {
       navigate('/admin/cajero', { replace: true });
       return;
     }
+    if (roles.includes('GESTOR_STOCK')) {
+      navigate('/admin/productos', { replace: true });
+      return;
+    }
   }, [user, navigate]);
 
-  // Staff de gestión → Dashboard con KPIs y gráficos
   return <Dashboard />;
 }
 

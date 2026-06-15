@@ -14,15 +14,15 @@ const Navbar = () => {
   const handleLogout = () => { logout(); navigate('/'); };
 
 
-  // Mismo conjunto que ADMIN_ROLES en App.tsx (incluye Cajero y Cocina
-  // para que también puedan entrar a su panel desde el navbar).
+  // Conjunto que ADMIN_ROLES en App.tsx (incluye Cajero y Cocina
+  
   const canSeeAdminPanel = user?.roles?.some((rol: any) => 
     ['ADMIN', 'GESTOR_STOCK', 'GESTOR_PEDIDOS', 'CAJERO', 'COCINA'].includes(rol.codigo || rol.rol_codigo)
   );
 
   return (
     <>
-    <nav className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-lg sticky top-0 z-50">
+    <nav className="bg-slate-900 text-white p-2 flex justify-between items-center shadow-lg sticky top-0 z-50">
       <Link to="/" className="text-2xl font-black tracking-tight hover:text-orange-500 transition-colors">
         FOOD<span className="text-orange-500">STORE</span>
       </Link>
@@ -128,7 +128,7 @@ const Navbar = () => {
       </div>
     </nav>
 
-    {/* panel del carrito (fuera del nav para evitar conflictos de z-index) */}
+    {/* panel del carrito  */}
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
     </>
   );

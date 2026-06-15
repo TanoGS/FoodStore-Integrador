@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import List, Optional
 from datetime import datetime
+import re
 
 # ==============================================================================
 # 1. ESQUEMA: RolPublic (Molde para exponer la Clave Natural)
@@ -21,7 +22,18 @@ class UsuarioBase(BaseModel):
     email: EmailStr
     nombre: str
     apellido: str
-    cel: Optional[str] = None  
+    cel: str  # obligatorio
+
+    @field_validator("cel")
+    @classmethod
+    def validar_cel(cls, v: str) -> str:
+        """Solo dígitos, entre 10 y 15."""
+        if not v or not v.strip():
+            raise ValueError("El celular es obligatorio")
+        limpio = re.sub(r"\D", "", v)
+        if len(limpio) < 10 or len(limpio) > 15:
+            raise ValueError("El celular debe tener entre 10 y 15 dígitos")
+        return limpio
 
 
 class UsuarioCreate(UsuarioBase):

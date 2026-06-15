@@ -1,39 +1,30 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import {
-  PedidoService,
-  type Pedido,
-} from '../../services/pedido.service';
-
-// Tipo inferido del campo `detalles` del pedido (no requiere import extra)
-type DetallePedido = Pedido['detalles'][number];
+import { PedidoService, type Pedido } from '../../services/pedido.service';
 import { usePedidoEventos } from '../../hooks/usePedidoWebSocket';
 import type { WSEvent } from '../../store/wsStore';
 import {
-  Banknote,
-  Clock, AlertTriangle, Timer,
+  Banknote, Clock, AlertTriangle, Timer,
   Loader2, User, ChefHat, Truck, Package,
-  CheckCircle2,
+  CheckCircle2, X, Check, XCircle,
 } from 'lucide-react';
+import MotivoModal from './MotivoModal';
 
-// ─────────────────────────────────────────────────────────────────────
-// Tipos y config
-// ─────────────────────────────────────────────────────────────────────
-type CajeroPedido = Pedido;
+type DetallePedido = Pedido['detalles'][number];
 
-// El cajero ya no recibe pedidos en PENDIENTE (nacen en CONFIRMADO
-// desde el backend porque el pago se confirma online con MercadoPago).
-// Por lo tanto solo ve los estados del ciclo operativo.
+// Todos los estados que ve el cajero (incluye PENDIENTE para EFECTIVO)
 const CAJERO_ESTADOS = [
+  'PENDIENTE',
   'CONFIRMADO',
   'EN_PREPARACION',
   'EN_CAMINO',
   'ENTREGADO',
+  'CANCELADO',
 ] as const;
 type CajeroEstado = typeof CAJERO_ESTADOS[number];
 
-// Filtros disponibles en la barra de tabs (sin "A Confirmar")
+// Filtros (excluye PENDIENTE de las tabs normales)
 type FiltroKey = 'todos' | 'en_curso' | 'listos' | 'entregados';
 const FILTROS: { key: FiltroKey; label: string; match: (e: string) => boolean }[] = [
   { key: 'todos',      label: 'Todos',              match: () => true },
@@ -42,44 +33,41 @@ const FILTROS: { key: FiltroKey; label: string; match: (e: string) => boolean }[
   { key: 'entregados', label: 'Entregados',         match: (e) => e === 'ENTREGADO' },
 ];
 
-// Badge de estado (label + clases Tailwind para celda)
+const TIPO_ENTREGA_BADGE: Record<string, { label: string; cls: string }> = {
+  EN_LOCAL: { label: 'LOCAL', cls: 'bg-orange-700 text-orange-100' },
+  DELIVERY: { label: 'DELIV', cls: 'bg-blue-700   text-blue-100'  },
+};
+
 const CAJERO_BADGE: Record<string, { label: string; cls: string }> = {
-  CONFIRMADO:     { label: 'En Cocina',  cls: 'bg-blue-500   text-white' },
-  EN_PREPARACION: { label: 'Preparando', cls: 'bg-orange-500 text-white' },
-  EN_CAMINO:      { label: 'Listo',      cls: 'bg-purple-500 text-white' },
-  ENTREGADO:      { label: 'Entregado',  cls: 'bg-green-500  text-white' },
-  CANCELADO:      { label: 'Cancelado',  cls: 'bg-red-500    text-white' },
+  PENDIENTE:       { label: 'Pago Efectivo', cls: 'bg-yellow-500 text-white' },
+  CONFIRMADO:      { label: 'En Cocina',    cls: 'bg-blue-500   text-white' },
+  EN_PREPARACION:  { label: 'Preparando',    cls: 'bg-orange-500 text-white' },
+  EN_CAMINO:       { label: 'Listo',        cls: 'bg-purple-500 text-white' },
+  ENTREGADO:       { label: 'Entregado',    cls: 'bg-green-500  text-white' },
+  CANCELADO:       { label: 'Cancelado',    cls: 'bg-red-500    text-white' },
 };
 
-// Tinte de fondo de la fila según estado (más sutil que el badge)
 const TINTE_FILA: Record<string, string> = {
-  CONFIRMADO:     'bg-blue-900/15  hover:bg-blue-900/25',
-  EN_PREPARACION: 'bg-orange-900/15 hover:bg-orange-900/25',
-  EN_CAMINO:      'bg-purple-900/15 hover:bg-purple-900/25',
-  ENTREGADO:      'bg-green-900/10 hover:bg-green-900/20',
-  CANCELADO:      'bg-red-900/10   hover:bg-red-900/20',
+  PENDIENTE:       'bg-yellow-900/20 hover:bg-yellow-900/35',
+  CONFIRMADO:      'bg-blue-900/15  hover:bg-blue-900/25',
+  EN_PREPARACION:  'bg-orange-900/15 hover:bg-orange-900/25',
+  EN_CAMINO:       'bg-purple-900/15 hover:bg-purple-900/25',
+  ENTREGADO:       'bg-green-900/10 hover:bg-green-900/20',
+  CANCELADO:       'bg-red-900/10   hover:bg-red-900/20',
 };
 
-// ─────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────
-
-/** "2× Milanesa, 1× Coca" — resumen compacto para la celda de productos */
 function resumenProductos(detalles: DetallePedido[]): string {
-  return detalles
-    .map((d) => `${d.cantidad}× ${d.nombre_snapshot}`)
-    .join(', ');
+  return detalles.map((d) => `${d.cantidad}× ${d.nombre_snapshot}`).join(', ');
 }
 
-/** Calcula los minutos desde la última transición */
 function minutosEnEstado(pedido: Pedido): number {
   const desde = pedido.actualizado_en ?? pedido.creado_en;
   return Math.floor((Date.now() - new Date(desde).getTime()) / 60_000);
 }
 
-/** Etiqueta contextual del timer */
 function etiquetaTimer(estado: string): string {
   switch (estado) {
+    case 'PENDIENTE':      return 'esperando';
     case 'CONFIRMADO':     return 'esperando';
     case 'EN_PREPARACION': return 'preparando';
     case 'EN_CAMINO':      return 'listo';
@@ -88,7 +76,6 @@ function etiquetaTimer(estado: string): string {
   }
 }
 
-/** Color del timer según urgencia */
 function timerColor(min: number): string {
   if (min < 5)  return 'text-green-400';
   if (min < 15) return 'text-yellow-400';
@@ -98,31 +85,29 @@ function timerColor(min: number): string {
 // ─────────────────────────────────────────────────────────────────────
 export default function VistaCajero() {
   const { user, isAuthenticated } = useAuthStore();
-  const [pedidos,      setPedidos]      = useState<CajeroPedido[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [toast,        setToast]        = useState<{ tipo: 'ok'|'err'; msg: string } | null>(null);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ tipo: 'ok'|'err'; msg: string } | null>(null);
   const [filtroActivo, setFiltroActivo] = useState<FiltroKey>('todos');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [modalMotivo, setModalMotivo] = useState<{ pedidoId: number } | null>(null);
+  const [procesando, setProcesando] = useState<Set<number>>(new Set());
 
-  // Solo CAJERO (o ADMIN por las dudas) puede entrar
   const isCajero = useMemo(
     () => user?.roles?.some((r) => r.codigo === 'CAJERO' || r.codigo === 'ADMIN') ?? false,
     [user?.roles]
   );
 
-  // Redirigir si no está logueado o no es cajero
   if (!isAuthenticated || !isCajero) {
     return <Navigate to="/admin" replace />;
   }
 
-  // ── Timer global: 1 sola interval para recalcular los timers de las filas ──
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // ── Cargar pedidos ─────────────────────────────────────────────────
   const cargarPedidos = useCallback(async () => {
     try {
       const todos = await PedidoService.listarTodos();
@@ -134,11 +119,8 @@ export default function VistaCajero() {
     }
   }, []);
 
-  useEffect(() => {
-    cargarPedidos();
-  }, [cargarPedidos]);
+  useEffect(() => { cargarPedidos(); }, [cargarPedidos]);
 
-  // ── Auto-ocultar toast ────────────────────────────────────────────
   useEffect(() => {
     if (!toast) return;
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -149,10 +131,9 @@ export default function VistaCajero() {
   // ── WebSocket ─────────────────────────────────────────────────────
   const handleEvent = useCallback((ev: WSEvent) => {
     if (ev.type === 'pedido.creado') {
-      const payload     = ev.payload as { pedido: { id: number; estado_codigo: string } };
-      const estadoNuevo = payload.pedido.estado_codigo;
-      if (CAJERO_ESTADOS.includes(estadoNuevo as CajeroEstado)) {
-        setToast({ tipo: 'ok', msg: '🔔 Nuevo pedido en cocina' });
+      const payload = ev.payload as { pedido: { id: number; estado_codigo: string } };
+      if (CAJERO_ESTADOS.includes(payload.pedido.estado_codigo as CajeroEstado)) {
+        setToast({ tipo: 'ok', msg: '🔔 Nuevo pedido recibido' });
         cargarPedidos();
       }
     } else if (ev.type === 'pedido.estado.cambiado') {
@@ -167,22 +148,51 @@ export default function VistaCajero() {
 
   usePedidoEventos(handleEvent);
 
-  // ── Conteos por estado (para los tabs de filtro) ──────────────────
-  const conteos = useMemo(() => ({
-    todos:      pedidos.length,
-    en_curso:   pedidos.filter((p) => p.estado_codigo === 'CONFIRMADO' || p.estado_codigo === 'EN_PREPARACION').length,
-    listos:     pedidos.filter((p) => p.estado_codigo === 'EN_CAMINO').length,
-    entregados: pedidos.filter((p) => p.estado_codigo === 'ENTREGADO').length,
-  }), [pedidos]);
+  // ── Acciones del cajero ─────────────────────────────────────────
+  const confirmarEfectivo = useCallback(async (pedidoId: number) => {
+    setProcesando(prev => new Set(prev).add(pedidoId));
+    try {
+      await PedidoService.actualizarEstado(pedidoId, 'CONFIRMADO');
+      setToast({ tipo: 'ok', msg: `Pedido #${pedidoId} confirmado. Se envía a cocina.` });
+    } catch {
+      setToast({ tipo: 'err', msg: `Error al confirmar pedido #${pedidoId}` });
+    } finally {
+      setProcesando(prev => { const s = new Set(prev); s.delete(pedidoId); return s; });
+    }
+  }, []);
 
-  // ── Pedidos filtrados según el tab activo ─────────────────────────
-  const pedidosFiltrados = useMemo(() => {
+  const cancelarPedido = useCallback(async (pedidoId: number, motivo: string) => {
+    setProcesando(prev => new Set(prev).add(pedidoId));
+    try {
+      await PedidoService.actualizarEstado(pedidoId, 'CANCELADO', motivo);
+      setToast({ tipo: 'ok', msg: `Pedido #${pedidoId} cancelado.` });
+    } catch {
+      setToast({ tipo: 'err', msg: `Error al cancelar pedido #${pedidoId}` });
+    } finally {
+      setProcesando(prev => { const s = new Set(prev); s.delete(pedidoId); return s; });
+    }
+  }, []);
+
+  // ── Datos separados ──────────────────────────────────────────────
+  const pendientesEfectivo = useMemo(
+    () => pedidos.filter((p) => p.estado_codigo === 'PENDIENTE'),
+    [pedidos]
+  );
+
+  const pedidosCiclo = useMemo(() => {
     const filtro = FILTROS.find((f) => f.key === filtroActivo);
-    if (!filtro) return pedidos;
-    return pedidos.filter((p) => filtro.match(p.estado_codigo));
+    return pedidos.filter(
+      (p) => p.estado_codigo !== 'PENDIENTE' && (!filtro || filtro.match(p.estado_codigo))
+    );
   }, [pedidos, filtroActivo]);
 
-  // ── Render ────────────────────────────────────────────────────────
+  const conteos = useMemo(() => ({
+    todos:      pedidosCiclo.length,
+    en_curso:   pedidosCiclo.filter((p) => p.estado_codigo === 'CONFIRMADO' || p.estado_codigo === 'EN_PREPARACION').length,
+    listos:     pedidosCiclo.filter((p) => p.estado_codigo === 'EN_CAMINO').length,
+    entregados: pedidosCiclo.filter((p) => p.estado_codigo === 'ENTREGADO').length,
+  }), [pedidosCiclo]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -202,31 +212,93 @@ export default function VistaCajero() {
           <div>
             <h1 className="text-3xl font-black tracking-tight">CAJERO</h1>
             <p className="text-yellow-400 text-sm font-medium">
+              {pendientesEfectivo.length > 0 && (
+                <span className="mr-3">{pendientesEfectivo.length} pendientes de pago</span>
+              )}
               {conteos.en_curso} en cocina · {conteos.listos} listos · {conteos.entregados} entregados
             </p>
           </div>
         </div>
-
-        <button
-          onClick={cargarPedidos}
-          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
-        >
-          <Clock className="w-4 h-4" />
-          Actualizar
+        <button onClick={cargarPedidos} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
+          <Clock className="w-4 h-4" /> Actualizar
         </button>
       </div>
 
       {/* ── Toast ─────────────────────────────────────────────────── */}
       {toast && (
-        <div
-          className={`mb-6 flex items-center gap-3 px-5 py-3 rounded-xl border-2 text-sm font-bold ${
-            toast.tipo === 'ok'
-              ? 'bg-green-900/60 border-green-500 text-green-300'
-              : 'bg-red-900/60 border-red-500 text-red-300'
-          }`}
-        >
+        <div className={`mb-6 flex items-center gap-3 px-5 py-3 rounded-xl border-2 text-sm font-bold ${
+          toast.tipo === 'ok' ? 'bg-green-900/60 border-green-500 text-green-300' : 'bg-red-900/60 border-red-500 text-red-300'
+        }`}>
           {toast.tipo === 'ok' ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
           {toast.msg}
+        </div>
+      )}
+
+      {/* ── Pedidos pendientes de pago en efectivo ─────────────────── */}
+      {pendientesEfectivo.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-black text-yellow-400 mb-3 flex items-center gap-2">
+            <Banknote className="w-5 h-5" />
+            Pendientes de Pago en Efectivo
+          </h2>
+          <div className="space-y-3">
+            {pendientesEfectivo.map((p) => (
+              <div
+                key={p.id}
+                className="bg-yellow-900/30 border border-yellow-600/40 rounded-2xl p-5 flex items-center gap-4 flex-wrap"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-2xl font-black text-white">#{p.id}</span>
+                    <span className="bg-yellow-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                      Pago en efectivo
+                    </span>
+                    {(p as any).tipo_entrega && (
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        TIPO_ENTREGA_BADGE[(p as any).tipo_entrega]?.cls ?? 'bg-slate-600 text-white'
+                      }`}>
+                        {TIPO_ENTREGA_BADGE[(p as any).tipo_entrega]?.label ?? (p as any).tipo_entrega}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-yellow-200/80">
+                    <span className="flex items-center gap-1">
+                      <User className="w-3.5 h-3.5" /> #{p.usuario_id}
+                    </span>
+                    <span className="max-w-xs truncate">{resumenProductos(p.detalles)}</span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-2xl font-black text-yellow-400">${p.total.toFixed(2)}</div>
+                  <div className={`text-xs font-bold ${timerColor(minutosEnEstado(p))}`}>
+                    {minutosEnEstado(p) < 1 ? 'recién' : `hace ${minutosEnEstado(p)}m`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => confirmarEfectivo(p.id)}
+                    disabled={procesando.has(p.id)}
+                    className="flex items-center gap-1.5 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+                  >
+                    {procesando.has(p.id) ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Check className="w-4 h-4" />
+                    )}
+                    Confirmar
+                  </button>
+                  <button
+                    onClick={() => setModalMotivo({ pedidoId: p.id })}
+                    disabled={procesando.has(p.id)}
+                    className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -240,28 +312,26 @@ export default function VistaCajero() {
               key={f.key}
               onClick={() => setFiltroActivo(f.key)}
               className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-bold transition-colors ${
-                active
-                  ? 'bg-slate-800 text-white border-b-2 border-yellow-500'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                active ? 'bg-slate-800 text-white border-b-2 border-yellow-500' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
               <span>{f.label}</span>
               <span className={`text-xs px-2 py-0.5 rounded-full font-black ${
                 active ? 'bg-yellow-500 text-slate-900' : 'bg-slate-700 text-slate-300'
-              }`}>
-                {count}
-              </span>
+              }`}>{count}</span>
             </button>
           );
         })}
       </div>
 
       {/* ── Tabla ─────────────────────────────────────────────────── */}
-      {pedidosFiltrados.length === 0 ? (
+      {pedidosCiclo.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-slate-500">
           <Banknote className="w-20 h-20 mb-4 opacity-30" />
-          <p className="text-2xl font-bold">No hay pedidos {filtroActivo !== 'todos' ? `en "${FILTROS.find(f => f.key === filtroActivo)?.label}"` : 'en el ciclo'}</p>
-          <p className="text-sm mt-2">Los pedidos confirmados por el cliente aparecerán aquí automáticamente.</p>
+          <p className="text-2xl font-bold">
+            No hay pedidos{filtroActivo !== 'todos' ? ` en "${FILTROS.find(f => f.key === filtroActivo)?.label}"` : ''}
+          </p>
+          <p className="text-sm mt-2">Los pedidos aparecerán aquí automáticamente.</p>
         </div>
       ) : (
         <div className="bg-slate-800/30 border border-slate-700 rounded-2xl overflow-hidden">
@@ -273,6 +343,7 @@ export default function VistaCajero() {
                   <th className="px-4 py-3 text-left font-bold">Cliente</th>
                   <th className="px-4 py-3 text-left font-bold">Estado</th>
                   <th className="px-4 py-3 text-left font-bold hidden md:table-cell">Pago</th>
+                  <th className="px-4 py-3 text-left font-bold hidden lg:table-cell">Entrega</th>
                   <th className="px-4 py-3 text-left font-bold">Productos</th>
                   <th className="px-4 py-3 text-left font-bold">Tiempo</th>
                   <th className="px-4 py-3 text-right font-bold">Total</th>
@@ -280,7 +351,7 @@ export default function VistaCajero() {
                 </tr>
               </thead>
               <tbody>
-                {pedidosFiltrados.map((p) => (
+                {pedidosCiclo.map((p) => (
                   <CajeroRow key={p.id} pedido={p} />
                 ))}
               </tbody>
@@ -288,83 +359,79 @@ export default function VistaCajero() {
           </div>
         </div>
       )}
+
+      {/* ── Modal de motivo para cancelar ──────────────────────────── */}
+      {modalMotivo && (
+        <MotivoModal
+          open={true}
+          onConfirm={async (motivo) => {
+            await cancelarPedido(modalMotivo.pedidoId, motivo);
+            setModalMotivo(null);
+          }}
+          onClose={() => setModalMotivo(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Sub-componente: Fila de la tabla
+// Fila de la tabla (solo pedidos en ciclo operativo, sin PENDIENTE)
 // ─────────────────────────────────────────────────────────────────────
-interface CajeroRowProps {
-  pedido: CajeroPedido;
-}
+function CajeroRow({ pedido }: { pedido: Pedido }) {
+  const badge = CAJERO_BADGE[pedido.estado_codigo] ?? { label: pedido.estado_codigo, cls: 'bg-slate-600' };
+  const tinteFila = TINTE_FILA[pedido.estado_codigo] ?? 'hover:bg-slate-800/50';
+  const min = minutosEnEstado(pedido);
 
-function CajeroRow({ pedido }: CajeroRowProps) {
-  const badge         = CAJERO_BADGE[pedido.estado_codigo] ?? { label: pedido.estado_codigo, cls: 'bg-slate-600' };
-  const tinteFila     = TINTE_FILA[pedido.estado_codigo] ?? 'hover:bg-slate-800/50';
-  const min           = minutosEnEstado(pedido);
-
-  // Iconito según estado
-  const EstadoIcon = pedido.estado_codigo === 'EN_PREPARACION' ? ChefHat :
-                     pedido.estado_codigo === 'EN_CAMINO'      ? Truck    :
-                     pedido.estado_codigo === 'ENTREGADO'      ? Package  :
-                     null;
+  const EstadoIcon =
+    pedido.estado_codigo === 'EN_PREPARACION' ? ChefHat :
+    pedido.estado_codigo === 'EN_CAMINO'      ? Truck    :
+    pedido.estado_codigo === 'ENTREGADO'       ? Package  :
+    null;
 
   return (
     <tr className={`border-b border-slate-800/50 transition-colors ${tinteFila}`}>
-      {/* ID */}
-      <td className="px-4 py-3">
-        <span className="text-lg font-black text-white">#{pedido.id}</span>
-      </td>
-
-      {/* Cliente */}
+      <td className="px-4 py-3"><span className="text-lg font-black text-white">#{pedido.id}</span></td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 text-slate-300">
           <User className="w-3.5 h-3.5 text-slate-500" />
           <span className="font-medium">#{pedido.usuario_id}</span>
         </div>
       </td>
-
-      {/* Estado (badge con ícono) */}
       <td className="px-4 py-3">
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${badge.cls}`}>
           {EstadoIcon && <EstadoIcon className="w-3 h-3" />}
           {badge.label}
         </span>
       </td>
-
-      {/* Pago (oculto en mobile) */}
-      <td className="px-4 py-3 text-slate-300 text-xs hidden md:table-cell">
-        {pedido.forma_pago_codigo}
+      <td className="px-4 py-3 text-slate-300 text-xs hidden md:table-cell">{pedido.forma_pago_codigo}</td>
+      <td className="px-4 py-3 hidden lg:table-cell">
+        {(pedido as any).tipo_entrega ? (
+          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+            TIPO_ENTREGA_BADGE[(pedido as any).tipo_entrega]?.cls ?? 'bg-slate-600 text-white'
+          }`}>
+            {TIPO_ENTREGA_BADGE[(pedido as any).tipo_entrega]?.label ?? (pedido as any).tipo_entrega}
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-500">—</span>
+        )}
       </td>
-
-      {/* Productos (resumen compacto) */}
       <td className="px-4 py-3">
         <div className="max-w-xs truncate text-slate-200" title={resumenProductos(pedido.detalles)}>
           {resumenProductos(pedido.detalles)}
         </div>
       </td>
-
-      {/* Tiempo en estado */}
       <td className="px-4 py-3 whitespace-nowrap">
         <div className={`flex items-center gap-1.5 text-xs font-bold ${timerColor(min)}`}>
           <Timer className="w-3.5 h-3.5" />
           <span>{etiquetaTimer(pedido.estado_codigo)} {min < 1 ? 'recién' : `hace ${min}m`}</span>
         </div>
       </td>
-
-      {/* Total */}
       <td className="px-4 py-3 text-right">
-        <span className="text-yellow-400 font-black">
-          ${pedido.total.toFixed(2)}
-        </span>
+        <span className="text-yellow-400 font-black">${pedido.total.toFixed(2)}</span>
       </td>
-
-      {/* Acción */}
       <td className="px-4 py-3">
-        <div className="flex items-center justify-end">
-          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">—</span>
-        </div>
+        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">—</span>
       </td>
     </tr>
   );
