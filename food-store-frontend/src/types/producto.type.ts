@@ -19,6 +19,12 @@ export interface Producto {
   nombre: string;
   descripcion?: string;
   precio: number;
+  /** Alias de `precio` para compatibilidad con componentes que usan `precio_base`. */
+  precio_base?: number;
+  /** Stock disponible del producto (stock_cantidad del backend). */
+  stock_cantidad?: number;
+  /** Alias para `stock_cantidad` para compatibilidad con componentes que usan `stock_disponible`. */
+  stock_disponible?: number;
   imagen_url?: string | null;
   categorias?: Categoria[];
   activo?: boolean;

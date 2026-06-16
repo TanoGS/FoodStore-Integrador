@@ -10,6 +10,7 @@ from .events import (
     serialize_pedido_creado,
     serialize_pedido_estado_cambiado,
     serialize_pedido_mio_actualizado,
+    serialize_stock_alerta,
 )
 from .schemas import (
     AvanzarEstadoRequest,
@@ -282,6 +283,7 @@ async def avanzar_estado(
     Al confirmarse, emite por WebSocket:
     - `pedido.estado.cambiado`   → sala `staff:pedidos`
     - `pedido.mio.actualizado`   → sala `user:{usuario_id}` del cliente
+    - `stock.alerta`             → sala `staff:pedidos` (si algún ingrediente quedó bajo stock de seguridad)
     """
     actor_id = int(current_user.id)
     resultado = svc.avanzar_estado(pedido_id, datos, actor_id)
@@ -311,5 +313,12 @@ async def avanzar_estado(
             ),
         ),
     )
+
+    # ── Alerta de stock bajo (stock ya persisted tras commit del UoW) ──
+    if resultado.stock_bajo:
+        await ws_manager.broadcast(
+            ROOM_STAFF_PEDIDOS,
+            serialize_stock_alerta(resultado.stock_bajo),
+        )
 
     return resultado.pedido

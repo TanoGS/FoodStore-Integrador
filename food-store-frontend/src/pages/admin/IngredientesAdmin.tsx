@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Edit, Trash2, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Edit, Trash2, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, Plus, X, AlertCircle } from 'lucide-react';
 import { CatalogoService } from '../../services/catalogo.service';
 import IngredienteModal from '../../components/admin/IngredienteModal';
 import { useRole } from '../../hooks/useRole';
+import { useWSStore, type StockAlerta } from '../../store/wsStore';
 
 // ── TypeScript: interfaz fiel al schema del backend (IngredientePublic) ────────
 interface Ingrediente {
@@ -90,6 +91,24 @@ export default function IngredientesAdmin() {
   const abrirNuevo   = () => { setIngredienteEditando(null); setIsModalOpen(true); };
 
   const colSpan = puedeEditar ? 9 : 8;
+
+  // ── WebSocket: suscripción a alertas de stock bajo ─────────────────────────
+  const stockAlertas = useWSStore((s) => s.stockAlertas);
+  // Alerta visible en el modal (la más reciente que no fue dismissada)
+  const [alertaActual, setAlertaActual] = useState<StockAlerta | null>(null);
+
+  // Cuando llega una nueva alerta, mostrarla y hacer refresh de la tabla
+  const prevCountRef = useRef(stockAlertas.length);
+  useEffect(() => {
+    if (stockAlertas.length > prevCountRef.current) {
+      const latest = stockAlertas[stockAlertas.length - 1];
+      setAlertaActual(latest);
+      void invalidar(); // refresh del query de ingredientes
+    }
+    prevCountRef.current = stockAlertas.length;
+  }, [stockAlertas, invalidar]);
+
+  const cerrarAlerta = () => setAlertaActual(null);
 
   return (
     <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6">
@@ -268,13 +287,97 @@ export default function IngredientesAdmin() {
         </div>
       )}
 
-      {/* MODAL */}
+      {/* MODAL de ingrediente */}
       {isModalOpen && (
         <IngredienteModal
           ingrediente={ingredienteEditando}
           onClose={() => setIsModalOpen(false)}
           onSave={(payload) => mutGuardar.mutate(payload)}
         />
+      )}
+
+      {/* MODAL de alerta de stock bajo */}
+      {alertaActual && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="stock-alerta-title"
+        >
+          <div className="bg-slate-800 border-2 border-red-500 rounded-2xl shadow-2xl shadow-red-500/20 w-full max-w-md overflow-hidden">
+            {/* Header rojo */}
+            <div className="bg-red-900/60 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-6 h-6 text-red-300" />
+                <h2 id="stock-alerta-title" className="text-lg font-black text-red-200">
+                  ¡Stock Bajo!
+                </h2>
+              </div>
+              <button
+                onClick={cerrarAlerta}
+                aria-label="Cerrar alerta"
+                className="text-red-300 hover:text-red-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-slate-400 text-sm mb-1">Ingrediente</p>
+                <p className="text-white font-black text-xl">{alertaActual.ingrediente_nombre}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-red-900/30 border border-red-700/40 rounded-xl p-3 text-center">
+                  <p className="text-red-400 text-xs font-bold uppercase mb-1">Stock Actual</p>
+                  <p className="text-red-200 font-black text-2xl">
+                    {alertaActual.stock_actual}
+                    <span className="text-sm font-normal text-red-400 ml-1">
+                      {alertaActual.unidad_medida}
+                    </span>
+                  </p>
+                </div>
+                <div className="bg-slate-700 border border-slate-600 rounded-xl p-3 text-center">
+                  <p className="text-slate-400 text-xs font-bold uppercase mb-1">Stock Mínimo</p>
+                  <p className="text-slate-200 font-black text-2xl">
+                    {alertaActual.stock_seguridad}
+                    <span className="text-sm font-normal text-slate-400 ml-1">
+                      {alertaActual.unidad_medida}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-slate-400 text-xs">
+                Este ingrediente quedó por debajo del stock de seguridad tras procesar el pedido #{alertaActual.pedido_id}.
+                Considerá reponerlo para no afectar futuras ventas.
+              </p>
+            </div>
+
+            {/* Acciones */}
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={cerrarAlerta}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-2.5 rounded-xl transition-colors"
+              >
+                Entendido
+              </button>
+              <button
+                onClick={() => {
+                  cerrarAlerta();
+                  // Ir a la fila del ingrediente en la tabla
+                  setFiltroNombre(alertaActual.ingrediente_nombre);
+                  setPagina(1);
+                }}
+                className="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold py-2.5 rounded-xl transition-colors"
+              >
+                Ir al ingrediente
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

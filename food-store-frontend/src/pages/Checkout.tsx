@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
@@ -8,6 +8,7 @@ import { PagosService } from '../services/pagos.service';
 import {
   MapPin, ShoppingBag, CreditCard, ArrowLeft, Loader2, Plus,
   Banknote, Smartphone, Check, Clock, ExternalLink, Store, Truck,
+  AlertCircle, XCircle, CheckCircle2,
 } from 'lucide-react';
 
 type FormaPagoCodigo = 'EFECTIVO' | 'MERCADOPAGO';
@@ -52,6 +53,8 @@ export default function Checkout() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paso, setPaso] = useState<'creando' | 'pagando' | 'redirigiendo'>('creando');
+  const [toast, setToast] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Redirect if not authenticated or cart empty
   useEffect(() => {
@@ -102,6 +105,14 @@ export default function Checkout() {
     }
   }, [tipoEntrega]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-dismiss del toast
+  useEffect(() => {
+    if (!toast) return;
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+    return () => { if (toastTimer.current) clearTimeout(toastTimer.current); };
+  }, [toast]);
+
   const handleFinalizarPedido = async () => {
     if (tipoEntrega === 'DELIVERY' && !direccionId) {
       alert("Por favor, seleccioná una dirección de entrega.");
@@ -151,22 +162,35 @@ export default function Checkout() {
         navigate(`/pedido-exitoso/${pedidoCreado.id}?status=pending`);
       }
     } catch (error: any) {
-      console.error("Error al procesar el pedido", error);
+      console.error("Error al procesar el pedido", error?.response?.data || error);
       const status = error?.response?.status;
       const detail = error?.response?.data?.detail;
+
+      // Caso especial: stock insuficiente → mensaje genérico (no filtrar detalles)
+      const esStockInsuficiente =
+        status === 400 &&
+        typeof detail === 'object' &&
+        detail?.error === 'stock_insuficiente';
+
       let msg = "Hubo un error al procesar tu pedido.";
-      if (status === 400) {
-        msg = `Datos inválidos: ${detail || 'verificá los productos y la dirección'}`;
+
+      if (esStockInsuficiente) {
+        msg = "En este momento no podemos realizar tu pedido. Por favor, intentá más tarde o contactanos.";
+      } else if (status === 400) {
+        msg = typeof detail === 'string'
+          ? `Datos inválidos: ${detail}`
+          : "Datos inválidos: verificá los productos y la dirección";
       } else if (status === 401) {
         msg = "Tu sesión expiró. Volvé a iniciar sesión.";
       } else if (status === 404) {
-        msg = `No se encontró el recurso: ${detail || ''}`;
+        msg = `No se encontró el recurso: ${typeof detail === 'string' ? detail : ''}`;
       } else if (status === 500) {
-        msg = `Error del servidor: ${detail || 'revisá los logs del backend'}`;
-      } else if (detail) {
-        msg = `Error: ${detail}`;
+        msg = "Error del servidor. Por favor, intentá más tarde.";
+      } else {
+        msg = typeof detail === 'string' ? detail : "Ocurrió un error inesperado.";
       }
-      alert(`${msg}\n\nDetalle técnico: ${JSON.stringify(error?.response?.data || error?.message)}`);
+
+      setToast({ tipo: 'err', msg });
     } finally {
       setIsSubmitting(false);
       setPaso('creando');
@@ -194,6 +218,29 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4">
+
+      {/* ── Toast de feedback ─────────────────────────────────────────── */}
+      {toast && (
+        <div
+          className={`mb-6 flex items-center gap-3 px-5 py-3 rounded-xl border-2 text-sm font-bold ${
+            toast.tipo === 'ok'
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}
+        >
+          {toast.tipo === 'ok'
+            ? <CheckCircle2 className="w-5 h-5 shrink-0" />
+            : <XCircle className="w-5 h-5 shrink-0" />}
+          <span className="flex-1">{toast.msg}</span>
+          <button
+            onClick={() => { setToast(null); if (toastTimer.current) clearTimeout(toastTimer.current); }}
+            className="ml-2 hover:opacity-70 transition-opacity"
+          >
+            <XCircle className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
 
         {/* ── COLUMNA IZQUIERDA ── */}

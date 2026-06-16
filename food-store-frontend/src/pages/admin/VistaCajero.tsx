@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { PedidoService, type Pedido } from '../../services/pedido.service';
+import { PagosService } from '../../services/pagos.service';
 import { usePedidoEventos } from '../../hooks/usePedidoWebSocket';
 import type { WSEvent } from '../../store/wsStore';
 import {
   Banknote, Clock, AlertTriangle, Timer,
   Loader2, User, ChefHat, Truck, Package,
-  CheckCircle2, X, Check, XCircle,
+  CheckCircle2, X, Check, XCircle, RefreshCw,
 } from 'lucide-react';
 import MotivoModal from './MotivoModal';
 
@@ -92,6 +93,15 @@ export default function VistaCajero() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [modalMotivo, setModalMotivo] = useState<{ pedidoId: number } | null>(null);
   const [procesando, setProcesando] = useState<Set<number>>(new Set());
+  const [sincronizando, setSincronizando] = useState<Set<number>>(new Set());
+  /**
+   * Cache local del mp_status de cada pedido que fue verificado.
+   * Se actualiza después de cada sincronización para que el frontend
+   * se entere del resultado sin depender de que el pedido avance de estado.
+   * Si el pedido avanza a CONFIRMADO, sale de la lista de pendientes
+   * automáticamente y desaparece de aquí.
+   */
+  const [localPagoStatus, setLocalPagoStatus] = useState<Record<number, string>>({});
 
   const isCajero = useMemo(
     () => user?.roles?.some((r) => r.codigo === 'CAJERO' || r.codigo === 'ADMIN') ?? false,
@@ -173,10 +183,53 @@ export default function VistaCajero() {
     }
   }, []);
 
+  /** Consulta MercadoPago para verificar si el pago fue aprobado. */
+  const verificarMP = useCallback(async (pedidoId: number) => {
+    setSincronizando(prev => new Set(prev).add(pedidoId));
+    try {
+      const pago = await PagosService.sincronizar(pedidoId);
+      if (pago.mp_status === 'approved') {
+        setLocalPagoStatus(prev => ({ ...prev, [pedidoId]: 'approved' }));
+        setToast({ tipo: 'ok', msg: `✅ Pago #${pedidoId} APROBADO en MercadoPago. El pedido avanza a cocina automáticamente.` });
+      } else if (pago.mp_status === 'not_found') {
+        setLocalPagoStatus(prev => ({ ...prev, [pedidoId]: 'not_found' }));
+        setToast({ tipo: 'err', msg: `⚠️ Pedido #${pedidoId}: MercadoPago no tiene registro del pago. ¿El cliente cerró la página antes de pagar?` });
+      } else {
+        setLocalPagoStatus(prev => ({ ...prev, [pedidoId]: pago.mp_status }));
+        setToast({ tipo: 'ok', msg: `⏳ Pedido #${pedidoId}: MercadoPago dice "${pago.mp_status}". El pago aún está pendiente. Reintentá en unos minutos.` });
+      }
+      // Refrescar la lista para que el pedido desaparezca de "Esperando MP"
+      // si ya fue aprobado y avanzó a CONFIRMADO (DELIVERY).
+      await cargarPedidos();
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? 'No se pudo conectar con MercadoPago. Verificá que el backend tenga MP_ACCESS_TOKEN configurado.';
+      setToast({ tipo: 'err', msg: `❌ Error verificando pago #${pedidoId}: ${msg}` });
+    } finally {
+      setSincronizando(prev => { const s = new Set(prev); s.delete(pedidoId); return s; });
+    }
+  }, [cargarPedidos]);
+
   // ── Datos separados ──────────────────────────────────────────────
+  // Solo MP que NO fue aprobado localmente (los approved se mueven a pendientesEfectivo).
+  const pendientesMP = useMemo(
+    () => pedidos.filter(
+      (p) => p.estado_codigo === 'PENDIENTE'
+        && p.forma_pago_codigo === 'MERCADOPAGO'
+        && localPagoStatus[p.id] !== 'approved'
+    ),
+    [pedidos, localPagoStatus]
+  );
+
+  // Efectivo real + MP ya aprobado localmente (esperando confirmación del retiro/entrega).
   const pendientesEfectivo = useMemo(
-    () => pedidos.filter((p) => p.estado_codigo === 'PENDIENTE'),
-    [pedidos]
+    () => pedidos.filter(
+      (p) => p.estado_codigo === 'PENDIENTE'
+        && (
+          p.forma_pago_codigo === 'EFECTIVO'
+          || (p.forma_pago_codigo === 'MERCADOPAGO' && localPagoStatus[p.id] === 'approved')
+        )
+    ),
+    [pedidos, localPagoStatus]
   );
 
   const pedidosCiclo = useMemo(() => {
@@ -234,6 +287,71 @@ export default function VistaCajero() {
         </div>
       )}
 
+      {/* ── Pedidos pendientes de MercadoPago ───────────────────────── */}
+      {pendientesMP.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-black text-blue-400 mb-3 flex items-center gap-2">
+            <RefreshCw className="w-5 h-5" />
+            MercadoPago — Esperando confirmación de pago
+          </h2>
+          <div className="space-y-3">
+            {pendientesMP.map((p) => (
+              <div
+                key={p.id}
+                className="bg-blue-900/30 border border-blue-600/40 rounded-2xl p-5 flex items-center gap-4 flex-wrap"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-2xl font-black text-white">#{p.id}</span>
+                    <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                      MercadoPago
+                    </span>
+                    {(p as any).tipo_entrega && (
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        TIPO_ENTREGA_BADGE[(p as any).tipo_entrega]?.cls ?? 'bg-slate-600 text-white'
+                      }`}>
+                        {TIPO_ENTREGA_BADGE[(p as any).tipo_entrega]?.label ?? (p as any).tipo_entrega}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-blue-200/80">
+                    <span className="flex items-center gap-1">
+                      <User className="w-3.5 h-3.5" /> #{p.usuario_id}
+                    </span>
+                    <span className="max-w-xs truncate">{resumenProductos(p.detalles)}</span>
+                  </div>
+                  <p className="text-xs text-blue-300/60 mt-1">
+                    Esperando que MercadoPago confirme el pago. Si pasaron más de 5 minutos y no cambió el estado,
+                    hacé clic en "Verificar con MP".
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-2xl font-black text-blue-400">${p.total.toFixed(2)}</div>
+                  <div className={`text-xs font-bold ${timerColor(minutosEnEstado(p))}`}>
+                    {minutosEnEstado(p) < 1 ? 'recién' : `hace ${minutosEnEstado(p)}m`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => verificarMP(p.id)}
+                    disabled={sincronizando.has(p.id)}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+                    title="Consulta MercadoPago para verificar si el pago fue aprobado"
+                  >
+                    {sincronizando.has(p.id) ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    Verificar con MP
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Pedidos pendientes de pago en efectivo ─────────────────── */}
       {pendientesEfectivo.length > 0 && (
         <div className="mb-6">
@@ -250,9 +368,15 @@ export default function VistaCajero() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-2xl font-black text-white">#{p.id}</span>
-                    <span className="bg-yellow-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
-                      Pago en efectivo
-                    </span>
+                    {p.forma_pago_codigo === 'MERCADOPAGO' && localPagoStatus[p.id] === 'approved' ? (
+                      <span className="bg-green-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                        Pagado con MP
+                      </span>
+                    ) : (
+                      <span className="bg-yellow-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                        Pago en efectivo
+                      </span>
+                    )}
                     {(p as any).tipo_entrega && (
                       <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
                         TIPO_ENTREGA_BADGE[(p as any).tipo_entrega]?.cls ?? 'bg-slate-600 text-white'

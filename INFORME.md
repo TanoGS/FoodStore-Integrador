@@ -280,6 +280,7 @@ foood-store-backend/
 - **Historial append-only:** Registro inmutable de cambios de estado
 - **Unit of Work:** Transacciones atómicas
 - **Snapshots de datos:** Captura de precios históricos
+- **Validaciones de stock:** Pre-validación al crear pedido (400) + pre-validación al confirmar (409) + WebSocket `stock.alerta` al staff
 
 **Máquina de Estados:**
 
@@ -340,7 +341,7 @@ foood-store-backend/
 - Pool de conexiones por canal
 - Broadcast post-commit (fuera del UoW)
 - Reconexión exponencial
-- Eventos: pedido.creado, pedido.estado.cambiado
+- Eventos: pedido.creado, pedido.estado.cambiado, stock.alerta
 
 #### **4.2.9 Admin (Administración)**
 
@@ -1388,8 +1389,8 @@ pytest -m "integration"
 ✅ **Estadísticas** (KPIs y gráficos)  
 ✅ **20+ tests** (pytest con cobertura)  
 ✅ **API REST** (30+ endpoints documentados)  
+✅ **Validaciones de stock en tiempo real** (pre-creación + pre-confirmación + alertas WebSocket)  
 ✅ **Soft delete** (auditoría completa)
 
----
 
 

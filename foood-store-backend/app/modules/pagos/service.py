@@ -218,66 +218,168 @@ class PagoService:
                 return {"status": "ok", "msg": "error consultando MP"}
 
             payment_info = mp_payment["response"]
-            external_ref = payment_info.get("external_reference")
-            if not external_ref:
-                logger.warning(f"Pago {payment_id} sin external_reference")
-                return {"status": "ok"}
-
-            # Buscar nuestro registro Pago
-            pago = self._session.exec(
-                select(Pago).where(Pago.external_reference == external_ref)
-            ).first()
-            if not pago:
-                logger.warning(f"No se encontró Pago con external_ref={external_ref}")
-                return {"status": "ok"}
-
-            # Actualizar datos del pago
-            pago.mp_payment_id = payment_info.get("id")
-            pago.mp_status = payment_info.get("status", pago.mp_status)
-            pago.mp_status_detail = payment_info.get("status_detail")
-            pago.transaction_amount = payment_info.get("transaction_amount", pago.transaction_amount)
-            pago.payment_method_id = payment_info.get("payment_method_id")
-            pago.actualizado_en = _utc_now()
-
-            # Si fue aprobado, avanzar el pedido a CONFIRMADO solo si es DELIVERY.
-            # Para EN_LOCAL el cajero debe confirmar presencialmente (validar pago en caja).
-            if pago.mp_status == "approved":
-                pedido = self._session.get(Pedido, pago.pedido_id)
-                if pedido and pedido.estado_codigo == "PENDIENTE":
-                    if pedido.tipo_entrega == "DELIVERY":
-                        estado_anterior = pedido.estado_codigo
-                        pedido.estado_codigo = "CONFIRMADO"
-                        pedido.actualizado_en = _utc_now()
-
-                        historial = HistorialEstadoPedido(
-                            pedido_id=pedido.id,
-                            estado_desde=estado_anterior,
-                            estado_hacia="CONFIRMADO",
-                            usuario_id=None,
-                            motivo="Pago aprobado por MercadoPago",
-                        )
-                        self._session.add(historial)
-                        logger.info(
-                            f"[MP] Pedido {pedido.id} avanzar a CONFIRMADO "
-                            f"(tipo_entrega=DELIVERY, payment_id={payment_id})"
-                        )
-                    else:
-                        # EN_LOCAL: queda PENDIENTE para confirmación del cajero en el local
-                        logger.info(
-                            f"[MP] Pedido {pedido.id} pago aprobado pero tipo_entrega=EN_LOCAL "
-                            f"→ queda PENDIENTE para confirmación del cajero"
-                        )
-
-            self._session.add(pago)
-            self._session.commit()
-
-            return {"status": "ok", "pago_id": pago.id, "mp_status": pago.mp_status}
+            return self._aplicar_estado_mp(payment_info, payment_id=payment_id)
         except Exception as e:
             logger.error(f"Error en _procesar_payment_id({payment_id}): {e}", exc_info=True)
             return {"status": "ok", "msg": str(e)}
 
+    def _aplicar_estado_mp(
+        self,
+        payment_info: dict,
+        payment_id: int | None = None,
+    ) -> dict:
+        """
+        Aplica el estado de un pago de MP al registro Pago local y,
+        si corresponde, avanza el pedido a CONFIRMADO.
+        Se comparte entre _procesar_payment_id (webhook) y sincronizar_con_mp.
+        """
+        external_ref = payment_info.get("external_reference")
+        if not external_ref:
+            logger.warning(f"Pago {payment_id} sin external_reference")
+            return {"status": "ok"}
+
+        # Buscar nuestro registro Pago
+        pago = self._session.exec(
+            select(Pago).where(Pago.external_reference == external_ref)
+        ).first()
+        if not pago:
+            logger.warning(f"No se encontró Pago con external_ref={external_ref}")
+            return {"status": "ok"}
+
+        # Actualizar datos del pago
+        pago.mp_payment_id = payment_info.get("id") or payment_id
+        pago.mp_status = payment_info.get("status", pago.mp_status)
+        pago.mp_status_detail = payment_info.get("status_detail")
+        pago.transaction_amount = payment_info.get("transaction_amount", pago.transaction_amount)
+        pago.payment_method_id = payment_info.get("payment_method_id")
+        pago.actualizado_en = _utc_now()
+
+        # Si fue aprobado, avanzar el pedido a CONFIRMADO solo si es DELIVERY.
+        # Para EN_LOCAL el cajero debe confirmar presencialmente (validar pago en caja).
+        if pago.mp_status == "approved":
+            pedido = self._session.get(Pedido, pago.pedido_id)
+            if pedido and pedido.estado_codigo == "PENDIENTE":
+                if pedido.tipo_entrega == "DELIVERY":
+                    estado_anterior = pedido.estado_codigo
+                    pedido.estado_codigo = "CONFIRMADO"
+                    pedido.actualizado_en = _utc_now()
+
+                    historial = HistorialEstadoPedido(
+                        pedido_id=pedido.id,
+                        estado_desde=estado_anterior,
+                        estado_hacia="CONFIRMADO",
+                        usuario_id=None,
+                        motivo="Pago aprobado por MercadoPago",
+                    )
+                    self._session.add(historial)
+                    logger.info(
+                        f"[MP] Pedido {pedido.id} avanzar a CONFIRMADO "
+                        f"(tipo_entrega=DELIVERY, payment_id={payment_id})"
+                    )
+                else:
+                    # EN_LOCAL: queda PENDIENTE para confirmación del cajero en el local
+                    logger.info(
+                        f"[MP] Pedido {pedido.id} pago aprobado pero tipo_entrega=EN_LOCAL "
+                        f"→ queda PENDIENTE para confirmación del cajero"
+                    )
+
+        self._session.add(pago)
+        self._session.commit()
+
+        return {"status": "ok", "pago_id": pago.id, "mp_status": pago.mp_status}
+
     # ─────────────────────────────────────────────────────────────────────
     # 3. CONSULTAR PAGO POR PEDIDO
+    # ─────────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────
+    # 4. SINCRONIZAR CON MERCADOPAGO (Reconciliación bajo demanda)
+    # ─────────────────────────────────────────────────────────────────────
+    def sincronizar_con_mp(self, pedido_id: int) -> PagoResponse:
+        """
+        Consulta el estado real del pago en MercadoPago y actualiza el
+        registro local. Útil cuando el webhook no llegó o el cajero
+        necesita verificar manualmente.
+
+        Estrategia:
+        1. Si ya tenemos mp_payment_id → sdk.payment().get(mp_payment_id)
+        2. Si NO tenemos mp_payment_id pero sí external_reference
+           → sdk.payment().search({"external_reference": ...})
+           y se toma el primer resultado (el más reciente).
+        3. Si MP no encuentra nada → mp_status="not_found", no se modifica nada.
+        """
+        # 1. Buscar el Pago
+        pago = self._session.exec(
+            select(Pago).where(Pago.pedido_id == pedido_id)
+        ).first()
+        if not pago:
+            raise HTTPException(
+                status_code=404,
+                detail="No hay pago registrado para este pedido. "
+                       "Primero hay que iniciar el pago desde MercadoPago."
+            )
+
+        if not self._sdk:
+            raise HTTPException(
+                status_code=503,
+                detail="SDK de MercadoPago no disponible. "
+                       "Verificá que MP_ACCESS_TOKEN esté configurado en el .env."
+            )
+
+        # 2. Consultar a MP
+        payment_info: Optional[dict] = None
+
+        if pago.mp_payment_id:
+            # Ya tenemos el ID del payment → consulta directa
+            logger.info(f"[MP] Sincronizando pago #{pago.id} con mp_payment_id={pago.mp_payment_id}")
+            mp_resp = self._sdk.payment().get(pago.mp_payment_id)
+            if mp_resp.get("status") == 200:
+                payment_info = mp_resp["response"]
+            else:
+                logger.warning(f"[MP] payment().get({pago.mp_payment_id}) devolvió status={mp_resp.get('status')}")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"MercadoPago no respondió para payment_id={pago.mp_payment_id}. "
+                           "El pago puede haber sido eliminado o la API de MP no está disponible."
+                )
+
+        elif pago.external_reference:
+            # No tenemos payment_id → buscar por external_reference
+            logger.info(f"[MP] Sincronizando pago #{pago.id} buscando por external_reference={pago.external_reference}")
+            search_resp = self._sdk.payment().search({
+                "external_reference": pago.external_reference,
+                "limit": 1,
+                "sort": "date_approved",
+                "criteria": "desc",
+            })
+            results = search_resp.get("response", {}).get("results", [])
+            if results:
+                payment_info = results[0]
+                logger.info(f"[MP] Pago encontrado en MP: id={payment_info.get('id')}, status={payment_info.get('status')}")
+            else:
+                logger.warning(f"[MP] No se encontró ningún pago en MP con external_reference={pago.external_reference}")
+                # No lanzamos excepción: devolvemos el pago con mp_status="not_found"
+                pago.mp_status = "not_found"
+                pago.actualizado_en = _utc_now()
+                self._session.add(pago)
+                self._session.commit()
+                self._session.refresh(pago)
+                return PagoResponse.model_validate(pago)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="El pago no tiene external_reference. "
+                       "No se puede consultar en MercadoPago."
+            )
+
+        # 3. Aplicar el estado de MP al registro local
+        self._aplicar_estado_mp(payment_info)
+
+        # 4. Refrescar y devolver
+        self._session.refresh(pago)
+        return PagoResponse.model_validate(pago)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # 5. CONSULTAR PAGO POR PEDIDO
     # ─────────────────────────────────────────────────────────────────────
     def obtener_pago_por_pedido(self, pedido_id: int, usuario_id: int) -> PagoResponse:
         pago = self._session.exec(

@@ -116,3 +116,53 @@ def serialize_pedido_mio_actualizado(
             actualizado_en=actualizado_en,
         ).model_dump(mode="json"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Payloads — Stock
+# ---------------------------------------------------------------------------
+
+
+class IngredienteCritico(BaseModel):
+    """Un ingrediente que quedó por debajo de su stock de seguridad."""
+
+    id: int
+    nombre: str
+    stock_actual: float
+    stock_seguridad: float
+    unidad: str
+
+
+class StockAlertaPayload(BaseModel):
+    """Payload de `stock.alerta`. Se envía a la sala de staff."""
+
+    ingredientes_criticos: List[IngredienteCritico]
+    # Cantidad de items en la alerta para que el badge sea útil
+    total: int
+
+
+def serialize_stock_alerta(ingredientes: List[dict]) -> dict:
+    """
+    Serializa el evento de alerta de stock bajo para broadcast por WebSocket.
+
+    Args:
+        ingredientes: Lista de dicts con campos:
+            - id, nombre, stock_actual, stock_seguridad, unidad
+    """
+    criticos = [
+        IngredienteCritico(
+            id=i["id"],
+            nombre=i["nombre"],
+            stock_actual=i["stock_actual"],
+            stock_seguridad=i["stock_seguridad"],
+            unidad=i["unidad"],
+        )
+        for i in ingredientes
+    ]
+    return {
+        "type": "stock.alerta",
+        "payload": StockAlertaPayload(
+            ingredientes_criticos=criticos,
+            total=len(criticos),
+        ).model_dump(mode="json"),
+    }

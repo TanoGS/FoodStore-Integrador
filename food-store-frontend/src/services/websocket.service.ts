@@ -13,7 +13,7 @@
 // el BroadcastChannel asociado — cada tab es independiente.
 // ─────────────────────────────────────────────────────────────────────
 
-import { useWSStore, type EstadoWS, type WSEvent } from '../store/wsStore';
+import { useWSStore, type EstadoWS, type WSEvent, type StockAlerta } from '../store/wsStore';
 import { fallbackPolling } from './fallbackPolling.service';
 
 // ─── Constantes ─────────────────────────────────────────────────────
@@ -297,6 +297,11 @@ class WebSocketService {
     });
     // Store (ring buffer + estado)
     useWSStore.getState().pushEvento(ev);
+
+    // Si es alerta de stock, guardarla en la cola del store
+    if (ev.type === 'stock.alerta') {
+      useWSStore.getState().pushStockAlerta(ev.payload as StockAlerta);
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────

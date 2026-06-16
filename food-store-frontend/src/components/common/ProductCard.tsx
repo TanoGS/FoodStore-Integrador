@@ -9,7 +9,9 @@ export default function ProductCard({ producto }: ProductCardProps) {
   // Manejo temporal si no hay imagen en la base de datos
   const imagenPorDefecto = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=60';
 
-  const sinStock = producto.stock_disponible <= 0;
+  const precio = producto.precio_base ?? producto.precio;
+  const stockDisponible = producto.stock_disponible ?? producto.stock_cantidad ?? 0;
+  const sinStock = stockDisponible <= 0;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col h-full group">
@@ -50,7 +52,7 @@ export default function ProductCard({ producto }: ProductCardProps) {
         {/* Footer de la tarjeta: Precio y Botón */}
         <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-50">
           <span className="text-orange-600 font-extrabold text-2xl">
-            ${producto.precio_base.toLocaleString()}
+            ${precio.toLocaleString()}
           </span>
           
           <button 

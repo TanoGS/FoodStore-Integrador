@@ -8,6 +8,7 @@ Endpoints:
 - GET  /pagos/redirect/failure     → MP redirige acá cuando se rechaza el pago
 - GET  /pagos/redirect/pending     → MP redirige acá cuando el pago está pendiente
 - GET  /pagos/{pedido_id}          → Consulta estado del pago
+- POST /pagos/{pedido_id}/sincronizar → Consulta MP y reconcilia (staff)
 """
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
@@ -103,3 +104,21 @@ def obtener_pago(
     current_user: TokenData = Depends(get_current_user_token),
 ):
     return svc.obtener_pago_por_pedido(pedido_id, usuario_id=int(current_user.id))
+
+
+# 4. Sincronizar con MercadoPago (staff)
+@router.post(
+    "/{pedido_id}/sincronizar",
+    response_model=PagoResponse,
+    dependencies=[Depends(RoleChecker(["ADMIN", "GESTOR_PEDIDOS", "CAJERO"]))],
+)
+def sincronizar_pago(
+    pedido_id: int,
+    svc: PagoService = Depends(get_pago_service),
+):
+    """
+    Consulta el estado real del pago en MercadoPago y actualiza el registro local.
+    Permite al staff (ADMIN, GESTOR_PEDIDOS, CAJERO) verificar manualmente si un
+    pago fue aprobado cuando el webhook no llegó o llegó tarde.
+    """
+    return svc.sincronizar_con_mp(pedido_id)

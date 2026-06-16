@@ -11,6 +11,16 @@ export interface WSEvent {
   ts?:     number;
 }
 
+// Payload del evento stock.alerta (backend → frontend)
+export interface StockAlerta {
+  ingrediente_id:       number;
+  ingrediente_nombre:  string;
+  stock_actual:        number;
+  stock_seguridad:      number;
+  unidad_medida:       string;
+  pedido_id:           number;
+}
+
 export type EstadoWS =
   | 'idle'         // Aún no se intentó conectar
   | 'connecting'   // El líder está abriendo el WebSocket
@@ -30,11 +40,16 @@ interface WSState {
   // Ring buffer de los últimos N eventos. Útil para depurar en DevTools
   // y para que un componente que se monta tarde pueda ver eventos recientes.
   eventos:     WSEvent[];
+  // Cola de alertas de stock bajo recibidas por WebSocket (para GestorStock)
+  stockAlertas: StockAlerta[];
 
   setEstado:    (estado: EstadoWS) => void;
   setError:     (msg: string | null) => void;
   pushEvento:   (event: WSEvent) => void;
   clearEventos: () => void;
+  // Acciones de alertas de stock
+  pushStockAlerta:   (alerta: StockAlerta) => void;
+  dismissStockAlerta: (index: number) => void;
 }
 
 const BUFFER_SIZE = 50;
@@ -43,6 +58,7 @@ export const useWSStore = create<WSState>((set) => ({
   estado:      'idle',
   ultimoError: null,
   eventos:     [],
+  stockAlertas: [],
 
   setEstado: (estado) => set({ estado }),
   setError:  (msg)    => set({ ultimoError: msg }),
@@ -54,4 +70,14 @@ export const useWSStore = create<WSState>((set) => ({
     return { eventos };
   }),
   clearEventos: () => set({ eventos: [] }),
+
+  pushStockAlerta: (alerta) =>
+    set((state) => ({
+      stockAlertas: [...state.stockAlertas, alerta].slice(-10),
+    })),
+
+  dismissStockAlerta: (index) =>
+    set((state) => ({
+      stockAlertas: state.stockAlertas.filter((_, i) => i !== index),
+    })),
 }));

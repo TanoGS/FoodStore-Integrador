@@ -10,7 +10,8 @@ import {
 } from '../../services/pedido.service';
 import MotivoModal from './MotivoModal';
 import { usePedidoEventos } from '../../hooks/usePedidoWebSocket';
-import type { WSEvent } from '../../store/wsStore';
+import { useWSStore } from '../../store/wsStore';
+import type { WSEvent, StockAlerta } from '../../store/wsStore';
 import {
   ClipboardList,
   Clock,
@@ -164,6 +165,13 @@ export default function GestorPedidos() {
           msg: `Pedido #${payload.pedido.id} → ${label}.`,
         });
       }
+    } else if (ev.type === 'stock.alerta') {
+      const alerta = ev.payload as StockAlerta;
+      const pct = Math.round((alerta.stock_actual / alerta.stock_seguridad) * 100);
+      mostrarFeedback({
+        tipo: 'err',
+        msg: `⚠️ STOCK BAJO: "${alerta.ingrediente_nombre}" tiene ${alerta.stock_actual} ${alerta.unidad_medida} (${pct}% del mínimo de ${alerta.stock_seguridad}). Revisar pedido #${alerta.pedido_id}.`,
+      });
     }
   }, [cargarPedidos]);
 
@@ -217,15 +225,30 @@ export default function GestorPedidos() {
       await cargarPedidos();
     } catch (error) {
       console.error('Error al cambiar estado:', error);
+      const status = (error as { response?: { status?: number } })
+        ?.response?.status;
       const detail = (error as { response?: { data?: { detail?: unknown } } })
         ?.response?.data?.detail;
-      mostrarFeedback({
-        tipo: 'err',
-        msg:
-          typeof detail === 'string'
-            ? detail
-            : 'No se pudo cambiar el estado. Verificá las reglas de transición.',
-      });
+
+      // Caso especial: stock insuficiente al confirmar (409 del backend)
+      const esStockInsuficiente =
+        status === 409 &&
+        typeof detail === 'object' &&
+        (detail as { error?: string })?.error === 'stock_insuficiente_al_confirmar';
+
+      let msg = 'No se pudo cambiar el estado. Verificá las reglas de transición.';
+
+      if (esStockInsuficiente) {
+        const d = detail as { pedido_id?: number };
+        const pid = d?.pedido_id;
+        msg = pid
+          ? `⚠️ El pedido #${pid} no se puede confirmar: el stock cambió desde que se creó. Contactá al cliente o cancelalo.`
+          : '⚠️ No se puede confirmar: el stock cambió desde que se creó. Contactá al cliente o cancelalo.';
+      } else if (typeof detail === 'string') {
+        msg = detail;
+      }
+
+      mostrarFeedback({ tipo: 'err', msg });
     } finally {
       setUpdatingId(null);
     }

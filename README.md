@@ -1,9 +1,9 @@
 
 ## Food Store - Integrador - Programación IV — UTN
 
-# Food Store es una aplicación web full-stack para la gestión integral de un negocio de comidas.
+Food Store es una aplicación web full-stack para la gestión integral de un negocio de comidas.
 
-# Integrantes: Renzo Sosa, Sponton Giani
+Integrantes: Renzo Sosa, Sponton Giani
 
 Link video Primer Parcial: https://youtu.be/qEJGTZU9tY8
 
@@ -37,6 +37,7 @@ Link video entrega Final: https://www.youtube.com/watch?v=LYIzaUC4-Tw
  **Estadísticas** (KPIs y gráficos)  
  **20+ tests** (pytest con cobertura)  
  **API REST** (30+ endpoints documentados)  
+ **Validaciones de stock en tiempo real** (pre-creación + pre-confirmación + alertas WebSocket)  
  **Soft delete** (auditoría completa)
 
 ---
@@ -55,6 +56,7 @@ Link video entrega Final: https://www.youtube.com/watch?v=LYIzaUC4-Tw
 | **WebSocket Manager** | Pool singleton con canales | Comunicación bidireccional |
 | **Cloudinary Integration** | Backend-signed uploads | Seguridad en manejo de medios |
 
+---
 
 ════════════════════════════════════════════════════
   FoodStore — Guía de Instalación y Ejecución

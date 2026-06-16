@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShoppingBag, Plus, Utensils } from 'lucide-react';
+import { ShoppingBag, Utensils } from 'lucide-react';
 import { CatalogoService } from '../services/catalogo.service';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
@@ -126,7 +126,7 @@ export default function Home() {
                             onClick={() => setProductoPersonalizar(producto)}
                             className="w-full bg-slate-900 hover:bg-orange-600 text-white font-bold py-3 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-slate-200"
                           >
-                            <Plus className="w-5 h-5" /> Agregar
+                            Agregar
                           </button>
                         )}
                       </div>

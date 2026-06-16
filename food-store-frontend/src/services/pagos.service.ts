@@ -26,4 +26,15 @@ export const PagosService = {
     const res = await api.get<PagoResponse>(`/pagos/${pedidoId}`);
     return res.data;
   },
+
+  /**
+   * Consulta el estado real del pago en MercadoPago y actualiza el registro local.
+   * Para uso del staff (cajero/admin): permite verificar manualmente si el pago
+   * fue aprobado cuando el webhook no llegó o llegó tarde.
+   * Requiere token JWT con rol ADMIN / GESTOR_PEDIDOS / CAJERO.
+   */
+  sincronizar: async (pedidoId: number): Promise<PagoResponse> => {
+    const res = await api.post<PagoResponse>(`/pagos/${pedidoId}/sincronizar`);
+    return res.data;
+  },
 };

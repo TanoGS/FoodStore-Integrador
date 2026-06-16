@@ -41,8 +41,9 @@ _FORMA_PAGO_LABELS: dict[str, str] = {
 # Resultado de un cambio de estado (para emitir por WebSocket)
 # ---------------------------------------------------------------------------
 class PedidoCambioResult(NamedTuple):
-    pedido:    PedidoPublic
-    historial: HistorialEstadoPublic
+    pedido:           PedidoPublic
+    historial:        HistorialEstadoPublic
+    stock_bajo:       Optional[List[dict]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,21 @@ class PedidoService:
     # 1. CREAR PEDIDO — TRANSACCIÓN ATÓMICA CON UNIT OF WORK
     # ====================================================================
     def crear_pedido(self, usuario_id: int, datos: PedidoCreate) -> PedidoCambioResult:
+        # ── Validar stock ANTES de iniciar la transacción ──────────────────
+        # Se construye una preview del pedido sin persistir nada.
+        # Si falta stock, se lanza un error 400 antes de entrar al UoW.
+        # El mensaje de detalle va en el response para debugging/admin;
+        # el frontend del cliente muestra un mensaje genérico al usuario.
+        faltantes_stock = self._obtener_resumen_stock_preview(datos)
+        if faltantes_stock:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "stock_insuficiente",
+                    "faltantes": faltantes_stock,
+                },
+            )
+
         with PedidoUnitOfWork(self._session) as uow:
             # 1. Validar productos y construir snapshots (precio + nombre congelados)
             detalles: List[DetallePedido] = []
@@ -234,9 +250,11 @@ class PedidoService:
                     detail="El motivo es obligatorio al cancelar.",
                 )
 
-            # Descontar stock al confirmar el pedido
+            # Descontar stock al confirmar el pedido y detectar alerta
+            stock_bajo: Optional[List[dict]] = None
             if estado_nuevo == EstadoPedido.CONFIRMADO.value:
-                self._descontar_stock(pedido)
+                cambios = self._descontar_stock(pedido)
+                stock_bajo = self._detectar_stock_bajo_actual(cambios)
 
             # Actualizar estado y persistir
             pedido.estado_codigo = estado_nuevo
@@ -261,6 +279,7 @@ class PedidoService:
             return PedidoCambioResult(
                 pedido=response,
                 historial=HistorialEstadoPublic.model_validate(historial),
+                stock_bajo=stock_bajo,
             )
 
     # ====================================================================
@@ -633,10 +652,62 @@ class PedidoService:
         - Por cada detalle: producto.stock_cantidad -= cantidad
         - Por cada ingrediente requerido (no removido): ingrediente.stock -= cantidad_requerida * cantidad
 
+        Validación:
+        - ANTES de descontar, verifica que haya stock suficiente.
+        - Si algún producto o ingrediente no tiene stock, lanza HTTPException(409)
+          y NO aplica ningún descuento (el pedido queda en PENDIENTE).
+
         Returns:
             Lista de dicts con {producto/ingrediente_id, tipo, nombre, stock_anterior, stock_nuevo}
             para construir el mensaje de notificación.
         """
+        # ── Pre-validación: verificar stock suficiente antes de descontar ──
+        faltantes: List[dict] = []
+
+        for detalle in pedido.detalles:
+            producto = self._session.get(Producto, detalle.producto_id)
+            if not producto:
+                continue
+
+            # Validar stock del producto
+            if producto.stock_cantidad < detalle.cantidad:
+                faltantes.append({
+                    "tipo": "PRODUCTO",
+                    "id": producto.id,
+                    "nombre": producto.nombre,
+                    "requerido": detalle.cantidad,
+                    "disponible": producto.stock_cantidad,
+                })
+
+            # Validar stock de ingredientes
+            removidos = set(detalle.personalizacion or [])
+            for enlace in producto.ingredientes_enlaces:
+                if enlace.ingrediente_id in removidos:
+                    continue
+                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
+                if not ingrediente:
+                    continue
+                cantidad_requerida = float(enlace.cantidad_requerida) * detalle.cantidad
+                if ingrediente.stock < cantidad_requerida:
+                    faltantes.append({
+                        "tipo": "INGREDIENTE",
+                        "id": ingrediente.id,
+                        "nombre": ingrediente.nombre,
+                        "requerido": cantidad_requerida,
+                        "disponible": ingrediente.stock,
+                    })
+
+        if faltantes:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "stock_insuficiente_al_confirmar",
+                    "pedido_id": pedido.id,
+                    "faltantes": faltantes,
+                },
+            )
+
+        # ── Descuento real ──
         cambios: List[dict] = []
 
         for detalle in pedido.detalles:
@@ -737,6 +808,102 @@ class PedidoService:
                 })
 
         return cambios
+
+    # ====================================================================
+    # VALIDACIÓN DE STOCK EN CREAR_PEDIDO
+    # ====================================================================
+
+    def _obtener_resumen_stock_preview(self, datos: PedidoCreate) -> List[dict]:
+        """
+        Valida disponibilidad de stock ANTES de crear el pedido.
+        Recibe el schema de request (PedidoCreate) — sin aún tener un pedido ORM.
+        Retorna lista de faltantes (vacía si todo OK).
+        """
+        resumen: List[dict] = []
+
+        for item in datos.detalles:
+            producto = self._session.get(Producto, item.producto_id)
+            if not producto:
+                # El error de "producto no existe" se maneja más arriba en crear_pedido
+                continue
+
+            removidos = set(item.personalizacion or [])
+
+            # Producto
+            if producto.stock_cantidad < item.cantidad:
+                resumen.append({
+                    "tipo": "PRODUCTO",
+                    "id": producto.id,
+                    "nombre": producto.nombre,
+                    "requerido": item.cantidad,
+                    "disponible": producto.stock_cantidad,
+                    "ok": False,
+                })
+
+            # Ingredientes
+            for enlace in producto.ingredientes_enlaces:
+                if enlace.ingrediente_id in removidos:
+                    continue
+                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
+                if not ingrediente:
+                    continue
+                requerido = float(enlace.cantidad_requerida) * item.cantidad
+                disponible = float(ingrediente.stock)
+                if disponible < requerido:
+                    resumen.append({
+                        "tipo": "INGREDIENTE",
+                        "id": ingrediente.id,
+                        "nombre": ingrediente.nombre,
+                        "requerido": requerido,
+                        "disponible": disponible,
+                        "ok": False,
+                    })
+
+        return resumen
+
+    # ====================================================================
+    # DETECCIÓN DE STOCK BAJO TRAS DESCONTAR (avanzar_estado → CONFIRMADO)
+    # ====================================================================
+
+    def _detectar_stock_bajo_actual(self, cambios_stock: List[dict]) -> List[dict]:
+        """
+        Recibe la lista de cambios devuelta por _descontar_stock y consulta
+        el stock actual de los ingredientes afectados.
+        Retorna la lista de ingredientes cuyo stock quedó por debajo de su
+        umbral de seguridad, con todos los datos necesarios para el payload
+        del WebSocket.
+
+        Returns:
+            Lista de dicts con {id, nombre, stock_actual, stock_seguridad, unidad}
+        """
+        criticos: List[dict] = []
+
+        for cambio in cambios_stock:
+            if cambio["tipo"] != "INGREDIENTE":
+                continue
+
+            ingrediente = self._session.get(Ingrediente, cambio["id"])
+            if not ingrediente:
+                continue
+
+            seguridad = getattr(ingrediente, "stock_seguridad", None)
+            if seguridad is None:
+                continue
+
+            if float(ingrediente.stock) < float(seguridad):
+                criticos.append({
+                    "id": ingrediente.id,
+                    "nombre": ingrediente.nombre,
+                    "stock_actual": float(ingrediente.stock),
+                    "stock_seguridad": float(seguridad),
+                    "unidad": getattr(ingrediente, "unidad", "u"),
+                })
+
+        return criticos
+
+    # ====================================================================
+    # PREVIEW DE STOCK (para _obtener_resumen_stock — existente)
+    # ====================================================================
 
     def _obtener_resumen_stock(self, pedido: Pedido) -> List[dict]:
         """
