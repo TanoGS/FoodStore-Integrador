@@ -26,6 +26,7 @@ from .schemas import (
 )
 from app.modules.catalogo.producto.models import Producto
 from app.modules.catalogo.ingrediente.models import Ingrediente
+from core.settings_runtime import get_costo_envio_delivery
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +61,7 @@ _FSM: dict[str, list[str]] = {
     EstadoPedido.PENDIENTE:      [EstadoPedido.CONFIRMADO,     EstadoPedido.CANCELADO],
     EstadoPedido.CONFIRMADO:     [EstadoPedido.EN_PREPARACION, EstadoPedido.CANCELADO],
     EstadoPedido.EN_PREPARACION: [EstadoPedido.EN_CAMINO,      EstadoPedido.CANCELADO],
-    EstadoPedido.EN_CAMINO:      [EstadoPedido.ENTREGADO],
+    EstadoPedido.EN_CAMINO:      [EstadoPedido.ENTREGADO,      EstadoPedido.CANCELADO],
     EstadoPedido.ENTREGADO:      [],
     EstadoPedido.CANCELADO:      [],
 }
@@ -156,8 +157,8 @@ class PedidoService:
 
             # 2. Calcular totales
             descuento = 0.0
-            # El costo de envío aplica SOLO para delivery
-            costo_envio = 50.0 if datos.tipo_entrega == TipoEntrega.DELIVERY else 0.0
+            # El costo de envío aplica SOLO para delivery (valor configurable desde el panel)
+            costo_envio = get_costo_envio_delivery() if datos.tipo_entrega == TipoEntrega.DELIVERY else 0.0
             total = round(subtotal - descuento + costo_envio, 2)
 
             # 3. Crear el pedido en estado PENDIENTE.
@@ -255,6 +256,11 @@ class PedidoService:
             if estado_nuevo == EstadoPedido.CONFIRMADO.value:
                 cambios = self._descontar_stock(pedido)
                 stock_bajo = self._detectar_stock_bajo_actual(cambios)
+
+            # Devolver stock si se cancela desde un estado donde ya se había descontado
+            # (el stock se descuenta al confirmar, por eso excluimos PENDIENTE)
+            if estado_nuevo == EstadoPedido.CANCELADO.value and estado_actual != EstadoPedido.PENDIENTE.value:
+                self._devolver_stock(pedido)
 
             # Actualizar estado y persistir
             pedido.estado_codigo = estado_nuevo
@@ -645,20 +651,22 @@ class PedidoService:
 
     def _descontar_stock(self, pedido: Pedido) -> List[dict]:
         """
-        Descuenta stock de productos e ingredientes al confirmar un pedido.
+        Descuenta stock de ingredientes al confirmar un pedido.
         Se llama cuando el pedido pasa a CONFIRMADO.
 
+        El stock de los productos se deriva de sus ingredientes; no se maneja
+        producto.stock_cantidad de forma independiente.
+
         Lógica:
-        - Por cada detalle: producto.stock_cantidad -= cantidad
         - Por cada ingrediente requerido (no removido): ingrediente.stock -= cantidad_requerida * cantidad
 
         Validación:
-        - ANTES de descontar, verifica que haya stock suficiente.
-        - Si algún producto o ingrediente no tiene stock, lanza HTTPException(409)
+        - ANTES de descontar, verifica que haya stock suficiente de ingredientes.
+        - Si algún ingrediente no tiene stock, lanza HTTPException(409)
           y NO aplica ningún descuento (el pedido queda en PENDIENTE).
 
         Returns:
-            Lista de dicts con {producto/ingrediente_id, tipo, nombre, stock_anterior, stock_nuevo}
+            Lista de dicts con {tipo, id, nombre, stock_anterior, stock_nuevo}
             para construir el mensaje de notificación.
         """
         # ── Pre-validación: verificar stock suficiente antes de descontar ──
@@ -669,17 +677,9 @@ class PedidoService:
             if not producto:
                 continue
 
-            # Validar stock del producto
-            if producto.stock_cantidad < detalle.cantidad:
-                faltantes.append({
-                    "tipo": "PRODUCTO",
-                    "id": producto.id,
-                    "nombre": producto.nombre,
-                    "requerido": detalle.cantidad,
-                    "disponible": producto.stock_cantidad,
-                })
-
-            # Validar stock de ingredientes
+            # Validar stock de ingredientes (el stock del producto se deriva de sus ingredientes;
+            # no se valida producto.stock_cantidad de forma independiente)
+            # TODO: eliminar campo producto.stock_cantidad en futuras migraciones.
             removidos = set(detalle.personalizacion or [])
             for enlace in producto.ingredientes_enlaces:
                 if enlace.ingrediente_id in removidos:
@@ -715,18 +715,6 @@ class PedidoService:
             if not producto:
                 continue
 
-            # Descontar stock del producto
-            stock_anterior_prod = producto.stock_cantidad
-            producto.stock_cantidad = max(0, producto.stock_cantidad - detalle.cantidad)
-            self._session.add(producto)
-            cambios.append({
-                "tipo": "PRODUCTO",
-                "id": producto.id,
-                "nombre": producto.nombre,
-                "stock_anterior": stock_anterior_prod,
-                "stock_nuevo": producto.stock_cantidad,
-            })
-
             # Obtener mapa de ingredientes removidos para este detalle
             removidos = set(detalle.personalizacion or [])
 
@@ -756,12 +744,14 @@ class PedidoService:
 
     def _devolver_stock(self, pedido: Pedido) -> List[dict]:
         """
-        Devuelve stock de productos e ingredientes al cancelar un pedido confirmado.
+        Devuelve stock de ingredientes al cancelar un pedido confirmado.
         Se llama cuando se cancela un pedido que ya estaba CONFIRMADO, EN_PREPARACION
         o EN_CAMINO (el stock ya fue descontado).
 
-        Lógica inversa a _descontar_stock:
-        - producto.stock_cantidad += cantidad
+        El stock de los productos se deriva de sus ingredientes; no se maneja
+        producto.stock_cantidad de forma independiente.
+
+        Lógica:
         - ingrediente.stock += cantidad_requerida * cantidad
         """
         cambios: List[dict] = []
@@ -770,18 +760,6 @@ class PedidoService:
             producto = self._session.get(Producto, detalle.producto_id)
             if not producto:
                 continue
-
-            # Devolver stock del producto
-            stock_anterior_prod = producto.stock_cantidad
-            producto.stock_cantidad += detalle.cantidad
-            self._session.add(producto)
-            cambios.append({
-                "tipo": "PRODUCTO",
-                "id": producto.id,
-                "nombre": producto.nombre,
-                "stock_anterior": stock_anterior_prod,
-                "stock_nuevo": producto.stock_cantidad,
-            })
 
             # Obtener mapa de ingredientes removidos para este detalle
             removidos = set(detalle.personalizacion or [])
@@ -829,18 +807,9 @@ class PedidoService:
 
             removidos = set(item.personalizacion or [])
 
-            # Producto
-            if producto.stock_cantidad < item.cantidad:
-                resumen.append({
-                    "tipo": "PRODUCTO",
-                    "id": producto.id,
-                    "nombre": producto.nombre,
-                    "requerido": item.cantidad,
-                    "disponible": producto.stock_cantidad,
-                    "ok": False,
-                })
-
-            # Ingredientes
+            # Ingredientes (el stock del producto se deriva de sus ingredientes;
+            # no se valida producto.stock_cantidad de forma independiente)
+            # TODO: eliminar campo producto.stock_cantidad en futuras migraciones.
             for enlace in producto.ingredientes_enlaces:
                 if enlace.ingrediente_id in removidos:
                     continue

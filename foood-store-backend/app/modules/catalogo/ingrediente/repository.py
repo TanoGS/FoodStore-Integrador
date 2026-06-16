@@ -39,3 +39,19 @@ class IngredienteRepository(BaseRepository[Ingrediente]):
             .offset(offset)
             .limit(limit)
         ).all()
+
+    def has_active_recipes(self, ingrediente_id: int) -> bool:
+        """Devuelve True si el ingrediente está en la receta de al menos un producto activo."""
+        from app.modules.catalogo.shared_models import ProductoIngrediente
+        from app.modules.catalogo.producto.models import Producto
+
+        result = self.session.exec(
+            select(ProductoIngrediente)
+            .join(Producto, Producto.id == ProductoIngrediente.producto_id)
+            .where(
+                ProductoIngrediente.ingrediente_id == ingrediente_id,
+                Producto.eliminado_en == None,  # noqa: E711
+                Producto.activo == True,
+            )
+        ).first()
+        return result is not None

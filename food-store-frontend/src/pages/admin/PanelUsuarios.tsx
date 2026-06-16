@@ -53,7 +53,7 @@ export default function PanelUsuarios() {
     nombre: '',
     apellido: '',
     password: '',
-    role_ids: [2]
+    role_codigos: ['CLIENTE'] as string[],
   });
 
   // ── Cargar usuarios ─────────────────────────────────────────────────────────
@@ -90,18 +90,19 @@ export default function PanelUsuarios() {
 
   const abrirNuevo = () => {
     setUsuarioEditando(null);
-    setFormData({ email: '', nombre: '', apellido: '', password: '', role_ids: [2] });
+    setFormData({ email: '', nombre: '', apellido: '', password: '', role_codigos: ['CLIENTE'] });
     setModalAbierto(true);
   };
 
   const abrirEditar = (u: any) => {
     setUsuarioEditando(u);
+    const rolesActuales = (u.roles || []).map((r: any) => getRolCodigo(r));
     setFormData({
       email: u.email || '',
       nombre: u.nombre || '',
       apellido: u.apellido || '',
       password: '',
-      role_ids: [u.roles_enlaces?.[0]?.id_rol || u.roles?.[0]?.id || 2]
+      role_codigos: rolesActuales.length > 0 ? rolesActuales : ['CLIENTE'],
     });
     setModalAbierto(true);
   };
@@ -109,10 +110,11 @@ export default function PanelUsuarios() {
   const handleCrear = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await UsuarioService.crear(formData);
+      // El endpoint de registro acepta role_codigos directamente
+      await UsuarioService.crear({ ...formData, password: formData.password });
       alert("Usuario creado con éxito");
       setModalAbierto(false);
-      setFormData({ email: '', nombre: '', apellido: '', password: '', role_ids: [2] });
+      setFormData({ email: '', nombre: '', apellido: '', password: '', role_codigos: ['CLIENTE'] });
       cargarUsuarios();
     } catch (error) {
       console.error(error);
@@ -124,7 +126,11 @@ export default function PanelUsuarios() {
     e.preventDefault();
     if (!usuarioEditando) return;
     try {
-      await UsuarioService.actualizar(usuarioEditando.id, formData);
+      // 1. Actualizar datos del perfil (sin roles)
+      const { role_codigos, password, ...perfilData } = formData;
+      await UsuarioService.actualizar(usuarioEditando.id, perfilData);
+      // 2. Actualizar rol por separado (endpoint dedicado)
+      await UsuarioService.asignarRoles(usuarioEditando.id, role_codigos);
       alert("Usuario actualizado con éxito");
       setModalAbierto(false);
       setUsuarioEditando(null);
@@ -366,19 +372,42 @@ export default function PanelUsuarios() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Rol</label>
-                <select
-                  value={Object.keys(ROLE_MAP).find(k => ROLE_MAP[k] === formData.role_ids[0]) || 'CLIENTE'}
-                  onChange={e => setFormData({...formData, role_ids: [ROLE_MAP[e.target.value]]})}
-                  className="w-full px-4 py-3 border border-slate-600 rounded-xl bg-slate-700 text-white outline-none focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="CLIENTE">Cliente</option>
-                  <option value="GESTOR_STOCK">Gestor de Stock</option>
-                  <option value="GESTOR_PEDIDOS">Gestor de Pedidos</option>
-                  <option value="CAJERO">Cajero</option>
-                  <option value="COCINA">Cocina</option>
-                  <option value="ADMIN">Administrador</option>
-                </select>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Roles</label>
+                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-700 rounded-xl border border-slate-600">
+                  {([
+                    { codigo: 'CLIENTE', label: 'Cliente' },
+                    { codigo: 'CAJERO', label: 'Cajero' },
+                    { codigo: 'COCINA', label: 'Cocina' },
+                    { codigo: 'GESTOR_PEDIDOS', label: 'Gestor de Pedidos' },
+                    { codigo: 'GESTOR_STOCK', label: 'Gestor de Stock' },
+                    { codigo: 'ADMIN', label: 'Administrador' },
+                  ] as { codigo: string; label: string }[]).map(({ codigo, label }) => {
+                    const checked = formData.role_codigos.includes(codigo);
+                    return (
+                      <label key={codigo} className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => {
+                            const next = e.target.checked
+                              ? [...formData.role_codigos, codigo]
+                              : formData.role_codigos.filter(r => r !== codigo);
+                            setFormData({ ...formData, role_codigos: next.length > 0 ? next : [codigo] });
+                          }}
+                          className="w-4 h-4 rounded accent-orange-500"
+                        />
+                        <span className={`text-sm font-medium ${
+                          checked ? 'text-white' : 'text-slate-400'
+                        } group-hover:text-white transition-colors`}>
+                          {label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {formData.role_codigos.length === 0 && (
+                  <p className="text-xs text-red-400 mt-1">Seleccioná al menos un rol.</p>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 mt-6">

@@ -272,6 +272,18 @@ class PagoService:
                         motivo="Pago aprobado por MercadoPago",
                     )
                     self._session.add(historial)
+
+                    # Descontar stock de ingredientes (igual que avanzar_estado → CONFIRMADO)
+                    # Import local para evitar circular en nivel de módulo
+                    from app.modules.pedido.service import PedidoService
+                    try:
+                        PedidoService(self._session)._descontar_stock(pedido)
+                    except Exception as e:
+                        logger.warning(
+                            f"[MP] No se pudo descontar stock para pedido {pedido.id}: {e}. "
+                            "El pedido avanza a CONFIRMADO de todas formas."
+                        )
+
                     logger.info(
                         f"[MP] Pedido {pedido.id} avanzar a CONFIRMADO "
                         f"(tipo_entrega=DELIVERY, payment_id={payment_id})"

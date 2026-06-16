@@ -73,6 +73,12 @@ class IngredienteService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Ingrediente no encontrado",
                 )
+            # RN: no se puede eliminar si está en la receta de un producto activo
+            if uow.ingredientes.has_active_recipes(ingrediente_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="No se puede eliminar: el ingrediente está en la receta de uno o más productos activos.",
+                )
             ingrediente.eliminado_en = datetime.now(timezone.utc)
             ingrediente.actualizado_en = datetime.now(timezone.utc)
             uow.ingredientes.add(ingrediente)

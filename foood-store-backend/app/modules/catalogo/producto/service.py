@@ -18,7 +18,7 @@ class ProductoService:
         uow = ProductoUnitOfWork(self._session)
         with uow:
             producto = Producto(
-                **data.model_dump(exclude={"categoria_ids", "receta", "precio_manual"})
+                **data.model_dump(exclude={"categoria_ids", "receta", "precio_manual", "costo_produccion_manual"})
             )
 
             # Asignar categorías del menú
@@ -48,12 +48,20 @@ class ProductoService:
                 )
                 producto.ingredientes_enlaces.append(enlace)
 
-            producto.costo_produccion = costo_total
+            # Usar costo manual si se proporcionó, sino usar el calculado de ingredientes
+            producto.costo_produccion = data.costo_produccion_manual if data.costo_produccion_manual is not None else costo_total
 
             if data.precio_manual is not None:
                 producto.precio = data.precio_manual
             else:
-                producto.precio = costo_total * (1 + float(producto.margen_ganancia) / 100)
+                producto.precio = float(producto.costo_produccion) * (1 + float(producto.margen_ganancia) / 100)
+
+            # RN: el precio final debe ser mayor a 0
+            if producto.precio <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El precio del producto no puede ser 0. Ingresá un precio manual o configurá la receta y el margen.",
+                )
 
             self._session.add(producto)
             self._session.flush()
@@ -125,13 +133,13 @@ class ProductoService:
                     producto.categorias.append(cat)
 
             # Si cambia la receta, recalcular escandallo
+            costo_total = 0.0
             if "receta" in update_data:
                 # Con cascade="all, delete-orphan" en el modelo, .clear()
                 # elimina los hijos de la DB automáticamente al hacer flush/commit
                 producto.ingredientes_enlaces.clear()
                 self._session.flush()
 
-                costo_total = 0.0
                 for item in data.receta:
                     ing = uow.ingredientes.get_activo(item.ingrediente_id)
                     if not ing:
@@ -147,17 +155,29 @@ class ProductoService:
                     )
                     producto.ingredientes_enlaces.append(enlace)
 
+            # Usar costo manual si se proporcionó, sino usar el calculado de ingredientes
+            costo_produccion_manual = update_data.get("costo_produccion_manual")
+            if costo_produccion_manual is not None:
+                producto.costo_produccion = costo_produccion_manual
+            elif "receta" in update_data:
                 producto.costo_produccion = costo_total
-                precio_manual = update_data.get("precio_manual")
-                if precio_manual is not None:
-                    producto.precio = precio_manual
-                else:
-                    margen = update_data.get("margen_ganancia", producto.margen_ganancia)
-                    producto.precio = costo_total * (1 + float(margen) / 100)
 
-            # Resto de campos escalares
+            # Aplicar margen_ganancia ANTES de recalcular precio para que el nuevo valor esté disponible
+            if "margen_ganancia" in update_data:
+                producto.margen_ganancia = update_data["margen_ganancia"]
+
+            precio_manual = update_data.get("precio_manual")
+            # Precedencia explícita:
+            # 1. precio_manual → precio directo, no importan margen ni costo
+            # 2. Sin precio_manual pero cambió costo/receta/margen → recalcular
+            if precio_manual is not None:
+                producto.precio = precio_manual
+            elif costo_produccion_manual is not None or "receta" in update_data or "margen_ganancia" in update_data:
+                producto.precio = float(producto.costo_produccion) * (1 + float(producto.margen_ganancia) / 100)
+
+            # Resto de campos escalares (margen_ganancia ya fue aplicado arriba)
             for key, value in update_data.items():
-                if key not in {"receta", "categoria_ids", "precio_manual"}:
+                if key not in {"receta", "categoria_ids", "precio_manual", "costo_produccion_manual", "margen_ganancia"}:
                     setattr(producto, key, value)
 
             producto.actualizado_en = datetime.now(timezone.utc)

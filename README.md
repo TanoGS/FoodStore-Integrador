@@ -83,10 +83,13 @@ Link video entrega Final: https://www.youtube.com/watch?v=LYIzaUC4-Tw
           Copy-Item .env.example .env
           # Editar .env con tus credenciales (ver sección 4)
    2.5  Crear la base de datos en PostgreSQL
-   2.6  Aplicar migraciones:
-          alembic upgrade head
-   2.7  (Opcional) Cargar datos iniciales:
+   2.6  Inicializar la BD (estructura + usuarios de prueba):
           python init_db.py
+        → Borra el schema public, crea todas las tablas vacías,
+          siembra los 6 usuarios de prueba y sincroniza Alembic.
+          (Equivale a: drop schema + create_all + seed usuarios + alembic stamp head)
+   2.7  (Opcional) Para aplicar migraciones futuras de Alembic:
+          alembic upgrade heads
    2.8  Levantar el servidor:
           uvicorn main:app --reload
         → Swagger: http://127.0.0.1:8000/docs

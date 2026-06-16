@@ -15,6 +15,7 @@ from sqlmodel import Session, select, func
 
 from core.database import get_session
 from core.security import RoleChecker, get_current_user_token, TokenData
+from core.settings_runtime import get_costo_envio_delivery, set_costo_envio_delivery
 from app.modules.pedido.models import Pedido, DetallePedido
 from app.modules.catalogo.producto.models import Producto
 
@@ -248,3 +249,47 @@ def rentabilidad_por_producto(session: Session = Depends(get_session)):
         ))
     out.sort(key=lambda x: x.margen, reverse=True)
     return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuración operativa — Costo de envío delivery
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Router separado para /admin/configuracion (misma base /admin pero diferente path)
+config_router = APIRouter(
+    prefix="/admin/configuracion",
+    tags=["Admin — Configuración"],
+    dependencies=[Depends(RoleChecker(["ADMIN", "GESTOR_PEDIDOS"]))],
+)
+
+
+class CostoEnvioOut(BaseModel):
+    costo_envio_delivery: float
+
+
+class CostoEnvioIn(BaseModel):
+    costo_envio_delivery: float
+
+
+@config_router.get("/costo-envio", response_model=CostoEnvioOut, summary="Obtener costo de envío delivery")
+def obtener_costo_envio():
+    """Devuelve el costo de envío actual para pedidos DELIVERY."""
+    return CostoEnvioOut(costo_envio_delivery=get_costo_envio_delivery())
+
+
+@config_router.patch("/costo-envio", response_model=CostoEnvioOut, summary="Actualizar costo de envío delivery")
+def actualizar_costo_envio(
+    body: CostoEnvioIn,
+    _: TokenData = Depends(get_current_user_token),
+):
+    """
+    Actualiza el costo de envío global para pedidos DELIVERY.
+    El valor se aplica a todos los pedidos nuevos desde este momento.
+    Se almacena en memoria: se resetea al reiniciar el servidor.
+    Solo ADMIN y GESTOR_PEDIDOS.
+    """
+    if body.costo_envio_delivery < 0:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="El costo de envío no puede ser negativo.")
+    set_costo_envio_delivery(body.costo_envio_delivery)
+    return CostoEnvioOut(costo_envio_delivery=get_costo_envio_delivery())

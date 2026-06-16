@@ -334,7 +334,7 @@ export default function VistaCajero() {
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => verificarMP(p.id)}
-                    disabled={sincronizando.has(p.id)}
+                    disabled={sincronizando.has(p.id) || procesando.has(p.id)}
                     className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
                     title="Consulta MercadoPago para verificar si el pago fue aprobado"
                   >
@@ -344,6 +344,15 @@ export default function VistaCajero() {
                       <RefreshCw className="w-4 h-4" />
                     )}
                     Verificar con MP
+                  </button>
+                  <button
+                    onClick={() => setModalMotivo({ pedidoId: p.id })}
+                    disabled={sincronizando.has(p.id) || procesando.has(p.id)}
+                    className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+                    title="Cancelar pedido — el pago no fue acreditado"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancelar
                   </button>
                 </div>
               </div>

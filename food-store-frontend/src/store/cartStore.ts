@@ -93,7 +93,7 @@ export const useCartStore = create<CartState>()(
 
         // 5. Cálculos automáticos para el Navbar y el Total a Pagar
         getTotalItems: () => get().items.reduce((total, item) => total + item.cantidad, 0),
-        getTotalPrice: () => get().items.reduce((total, item) => total + (item.producto.precio_base * item.cantidad), 0),
+        getTotalPrice: () => parseFloat(get().items.reduce((total, item) => total + (item.producto.precio_base * item.cantidad), 0).toFixed(1)),
 
         // 6. Cargar items (usado al iniciar sesión para restaurar el carrito del usuario)
         setItems: (items) => set({ items }),

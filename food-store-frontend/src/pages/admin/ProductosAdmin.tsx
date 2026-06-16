@@ -72,7 +72,18 @@ export default function ProductosAdmin() {
       id
         ? CatalogoService.actualizarProducto(id, payload)
         : CatalogoService.crearProducto(payload),
-    onSuccess: () => { invalidar(); setIsModalOpen(false); },
+    onSuccess: (nuevoProducto) => {
+      queryClient.setQueryData<Producto[]>(['productos'], (old = []) => {
+        if (nuevoProducto.id) {
+          // Editando: reemplazar en la lista
+          return old.map(p => p.id === nuevoProducto.id ? nuevoProducto : p);
+        } else {
+          // Creando: agregar al inicio
+          return [nuevoProducto, ...old];
+        }
+      });
+      setIsModalOpen(false);
+    },
     onError: (e: any) =>
       alert(`Error: ${e.response?.data?.detail || 'No se pudo guardar el producto'}`),
   });

@@ -53,6 +53,9 @@ class ProductoCreate(ProductoBase):
     precio_manual: Optional[float] = Field(
         default=None, description="Si se envía, sobreescribe el cálculo automático"
     )
+    costo_produccion_manual: Optional[float] = Field(
+        default=None, description="Costo de producción manual para productos sin ingredientes"
+    )
 
 
 class ProductoUpdate(BaseModel):
@@ -63,6 +66,9 @@ class ProductoUpdate(BaseModel):
     activo: Optional[bool] = None
     margen_ganancia: Optional[float] = None
     precio_manual: Optional[float] = None
+    costo_produccion_manual: Optional[float] = Field(
+        default=None, description="Costo de producción manual para productos sin ingredientes"
+    )
     categoria_ids: Optional[List[int]] = None
     receta: Optional[List[RecetaItemCreate]] = None
 

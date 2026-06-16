@@ -19,6 +19,7 @@ export interface ProductoPayload {
   categoria_ids:   number[];
   margen_ganancia: number;
   precio_manual?:  number | null;
+  costo_produccion_manual?: number | null;
   receta:          RecetaItemPayload[];
 }
 
@@ -31,6 +32,7 @@ export interface ProductoEditar {
   activo:                boolean;
   margen_ganancia:       number;
   precio:                number;
+  costo_produccion?:     number;
   categorias?:           { id: number; nombre: string }[];
   receta_detallada?: {                          // nombre real que devuelve el backend
     ingrediente_id:     number;
@@ -89,6 +91,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
   // Finanzas
   const [margenGanancia, setMargenGanancia] = useState<number>(90);
   const [precioManual,   setPrecioManual]   = useState<number | ''>('');
+  const [costoProduccionManual, setCostoProduccionManual] = useState<number | ''>('');
 
   // Ingredientes: mapa id → configuración de fila
   const [ingConfig, setIngConfig] = useState<Record<number, IngCfg>>({});
@@ -108,6 +111,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
     margen_ganancia: number;
     precio: number;
     precio_es_null: boolean;
+    costo_produccion: number;
     categoriaId: number | null;
     receta: RecetaItemPayload[];
   } | null>(null);
@@ -147,6 +151,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
         setActivo(productoEditar.activo !== false);
         setMargenGanancia(productoEditar.margen_ganancia ?? 90);
         setPrecioManual(productoEditar.precio ?? '');
+        setCostoProduccionManual(productoEditar.costo_produccion ?? '');
 
         if (productoEditar.categorias?.length) {
           setCategoriaId(productoEditar.categorias[0].id);
@@ -169,16 +174,17 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
 
         // Guardar estado inicial para diff
         setInitialState({
-          nombre:           productoEditar.nombre || '',
-          descripcion:      productoEditar.descripcion || '',
-          imagen_url:       productoEditar.imagen_url || '',
-          stock_cantidad:   productoEditar.stock_cantidad ?? 0,
-          activo:           productoEditar.activo !== false,
-          margen_ganancia:  productoEditar.margen_ganancia ?? 90,
-          precio:           productoEditar.precio ?? 0,
-          precio_es_null:   productoEditar.precio === null,
-          categoriaId:      productoEditar.categorias?.[0]?.id ?? null,
-          receta:           (recetaEnlaces ?? [])?.map((e: any) => ({
+          nombre:              productoEditar.nombre || '',
+          descripcion:         productoEditar.descripcion || '',
+          imagen_url:          productoEditar.imagen_url || '',
+          stock_cantidad:      productoEditar.stock_cantidad ?? 0,
+          activo:              productoEditar.activo !== false,
+          margen_ganancia:     productoEditar.margen_ganancia ?? 90,
+          precio:              productoEditar.precio ?? 0,
+          precio_es_null:      productoEditar.precio === null,
+          costo_produccion:    productoEditar.costo_produccion ?? 0,
+          categoriaId:         productoEditar.categorias?.[0]?.id ?? null,
+          receta:              (recetaEnlaces ?? [])?.map((e: any) => ({
             ingrediente_id:     e.ingrediente_id,
             cantidad_requerida: e.cantidad_requerida,
             es_removible:       e.es_removible,
@@ -231,9 +237,11 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
     () => receta.reduce((acc, r) => acc + r.cantidad_requerida * r._costo_unitario, 0),
     [receta]
   );
+  // Usar costo manual si está definido, sino usar el calculado de ingredientes
+  const costoBase = costoProduccionManual !== '' ? Number(costoProduccionManual) : costoTotalProduccion;
   const precioSugerido = useMemo(
-    () => costoTotalProduccion * (1 + margenGanancia / 100),
-    [costoTotalProduccion, margenGanancia]
+    () => costoBase * (1 + margenGanancia / 100),
+    [costoBase, margenGanancia]
   );
   const precioFinal = precioManual !== '' ? Number(precioManual) : precioSugerido;
 
@@ -286,6 +294,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
       if ((stock === '' ? 0 : Number(stock)) !== initialState.stock_cantidad) payload.stock_cantidad = stock === '' ? 0 : Number(stock);
       if (Number(margenGanancia) !== initialState.margen_ganancia) payload.margen_ganancia = Number(margenGanancia);
       if ((precioManual === '' ? null : Number(precioManual)) !== initialState.precio) payload.precio_manual = precioManual === '' ? null : Number(precioManual);
+      if ((costoProduccionManual === '' ? 0 : Number(costoProduccionManual)) !== initialState.costo_produccion) payload.costo_produccion_manual = costoProduccionManual === '' ? null : Number(costoProduccionManual);
       if (categoriaId !== initialState.categoriaId) payload.categoria_ids = [categoriaId];
       if (activo !== initialState.activo) payload.activo = activo;
       if (!recetasIguales(currentReceta, initialState.receta)) payload.receta = currentReceta;
@@ -299,15 +308,16 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
       onSave(payload);
     } else {
       // ── Creación: envía todo ───────────────────────────────────────────
-      const payload: ProductoPayload = {
+      const payload: Record<string, unknown> = {
         nombre,
         descripcion:     descripcion || null,
         imagen_url:      imagenUrl   || null,
-        stock:           stock === '' ? 0 : Number(stock),
+        stock_cantidad:  stock === '' ? 0 : Number(stock),
         activo,
         categoria_ids:   [categoriaId],
         margen_ganancia: Number(margenGanancia),
         precio_manual:   precioManual === '' ? null : Number(precioManual),
+        costo_produccion_manual: costoProduccionManual === '' ? null : Number(costoProduccionManual),
         receta: receta.map(r => ({
           ingrediente_id:     r.ingrediente_id,
           cantidad_requerida: r.cantidad_requerida,
@@ -548,7 +558,20 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
                   <div className="text-slate-400 text-xs font-bold mb-1">COSTO DE PRODUCCIÓN</div>
-                  <div className="text-2xl font-black text-white">${costoTotalProduccion.toFixed(2)}</div>
+                  <div className="text-2xl font-black text-white">
+                    ${costoProduccionManual !== '' 
+                      ? Number(costoProduccionManual).toFixed(2) 
+                      : costoTotalProduccion.toFixed(2)}
+                  </div>
+                  {receta.length === 0 && (
+                    <input
+                      type="number"
+                      value={costoProduccionManual}
+                      onChange={e => setCostoProduccionManual(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="mt-2 w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-sm text-white outline-none focus:border-orange-500"
+                      placeholder="Costo manual"
+                    />
+                  )}
                 </div>
                 <div className="space-y-4">
                   <div>

@@ -102,7 +102,7 @@ export const ESTADOS_FSM: Record<string, string[]> = {
   PENDIENTE:      ['CONFIRMADO',     'CANCELADO'],
   CONFIRMADO:     ['EN_PREPARACION', 'CANCELADO'],
   EN_PREPARACION: ['EN_CAMINO',      'CANCELADO'],
-  EN_CAMINO:      ['ENTREGADO'],
+  EN_CAMINO:      ['ENTREGADO',      'CANCELADO'],
   ENTREGADO:      [],
   CANCELADO:      [],
 };

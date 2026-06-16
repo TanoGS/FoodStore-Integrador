@@ -20,6 +20,12 @@ export const UsuarioService = {
     return response.data;
   },
 
+  /** Reemplaza completamente los roles de un usuario. Solo ADMIN. */
+  asignarRoles: async (id: number, role_codigos: string[]) => {
+    const response = await api.patch(`/usuarios/${id}/roles`, { role_codigos });
+    return response.data;
+  },
+
   eliminar: async (id: number) => {
     const response = await api.delete(`/usuarios/${id}`);
     return response.data;

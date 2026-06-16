@@ -28,7 +28,7 @@ from app.modules.pedido.router import router as pedido_router
 from app.modules.pedido.ws_router import router as pedido_ws_router
 from app.modules.direccion.router import router as direccion_router
 from app.modules.catalogo.router import router as catalogo_router
-from app.modules.admin.router import router as admin_router
+from app.modules.admin.router import router as admin_router, config_router as admin_config_router
 from app.modules.pagos.router import router as pagos_router
 from app.modules.imagenes.router import router as imagenes_router
 
@@ -69,5 +69,6 @@ app.include_router(pedido_ws_router, prefix=settings.API_V1_STR)
 app.include_router(direccion_router, prefix=settings.API_V1_STR)
 app.include_router(catalogo_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
+app.include_router(admin_config_router, prefix=settings.API_V1_STR)
 app.include_router(pagos_router, prefix=settings.API_V1_STR)
 app.include_router(imagenes_router, prefix=settings.API_V1_STR)

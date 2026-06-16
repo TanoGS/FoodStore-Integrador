@@ -8,6 +8,7 @@ import {
   ROLES_STAFF_PEDIDOS,
   type PedidoAdmin,
 } from '../../services/pedido.service';
+import { ConfiguracionService } from '../../services/configuracion.service';
 import MotivoModal from './MotivoModal';
 import { usePedidoEventos } from '../../hooks/usePedidoWebSocket';
 import { useWSStore } from '../../store/wsStore';
@@ -29,6 +30,8 @@ import {
   User,
   CreditCard,
   ShoppingBag,
+  Pencil,
+  Check,
 } from 'lucide-react';
 
 // ─── Config de la FSM ─────────────────────────────────────────────────
@@ -88,6 +91,12 @@ export default function GestorPedidos() {
   // Filtro de período: 'TODOS' | 'DIARIO' | 'MENSUAL'
   const [periodo, setPeriodo] = useState<'TODOS' | 'DIARIO' | 'MENSUAL'>('TODOS');
 
+  // ─── Costo de envío configurable ─────────────────────────────────
+  const [costoEnvio, setCostoEnvio] = useState<number | null>(null);
+  const [editandoCosto, setEditandoCosto] = useState(false);
+  const [costoEnvioInput, setCostoEnvioInput] = useState('');
+  const [savingCosto, setSavingCosto] = useState(false);
+
   // Trackear qué filas están expandidas para ver los productos
   const [expandidas, setExpandidas] = useState<Set<number>>(new Set());
 
@@ -123,6 +132,32 @@ export default function GestorPedidos() {
       cargarPedidos();
     }
   }, [canManageOrders, cargarPedidos]);
+
+  // Cargar costo de envío al montar
+  useEffect(() => {
+    ConfiguracionService.getCostoEnvio()
+      .then((data) => {
+        setCostoEnvio(data.costo_envio_delivery);
+        setCostoEnvioInput(String(data.costo_envio_delivery));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleGuardarCostoEnvio = async () => {
+    const valor = parseFloat(costoEnvioInput);
+    if (isNaN(valor) || valor < 0) return;
+    setSavingCosto(true);
+    try {
+      const data = await ConfiguracionService.setCostoEnvio(valor);
+      setCostoEnvio(data.costo_envio_delivery);
+      setEditandoCosto(false);
+      mostrarFeedback({ tipo: 'ok', msg: `Costo de envío actualizado a $${data.costo_envio_delivery.toFixed(2)}` });
+    } catch {
+      mostrarFeedback({ tipo: 'err', msg: 'No se pudo actualizar el costo de envío.' });
+    } finally {
+      setSavingCosto(false);
+    }
+  };
 
   // Limpia el timer al desmontar
   useEffect(() => {
@@ -276,6 +311,54 @@ export default function GestorPedidos() {
             </h1>
             <p className="text-slate-400">Panel operativo de ciclo de vida (FSM).</p>
           </div>
+        </div>
+
+        {/* ── Costo de envío configurable ────────────────────────────── */}
+        <div className="mb-6 flex items-center gap-3 bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-3">
+          <Truck className="w-5 h-5 text-blue-400 shrink-0" />
+          <span className="text-sm font-bold text-slate-300">Costo de envío DELIVERY:</span>
+          {editandoCosto ? (
+            <>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={costoEnvioInput}
+                onChange={(e) => setCostoEnvioInput(e.target.value)}
+                className="w-28 bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-1.5 outline-none focus:border-blue-500"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') handleGuardarCostoEnvio(); if (e.key === 'Escape') setEditandoCosto(false); }}
+              />
+              <button
+                onClick={handleGuardarCostoEnvio}
+                disabled={savingCosto}
+                className="flex items-center gap-1 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
+              >
+                {savingCosto ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Guardar
+              </button>
+              <button
+                onClick={() => { setEditandoCosto(false); setCostoEnvioInput(String(costoEnvio ?? '')); }}
+                className="text-slate-400 hover:text-white text-sm px-2 py-1.5 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-lg font-black text-blue-400">
+                {costoEnvio !== null ? `$${costoEnvio.toFixed(2)}` : '...'}
+              </span>
+              <button
+                onClick={() => { setEditandoCosto(true); setCostoEnvioInput(String(costoEnvio ?? 50)); }}
+                className="flex items-center gap-1 text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-slate-700 transition-colors"
+                title="Editar costo de envío"
+              >
+                <Pencil className="w-3.5 h-3.5" /> Editar
+              </button>
+            </>
+          )}
+          <span className="text-xs text-slate-500 ml-auto">Aplica a todos los pedidos nuevos</span>
         </div>
 
         {/* Feedback banner */}

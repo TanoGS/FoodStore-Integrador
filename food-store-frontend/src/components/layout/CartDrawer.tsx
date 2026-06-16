@@ -117,7 +117,7 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
             <div className="flex justify-between items-center mb-4">
               <span className="text-slate-500 font-medium">Total a pagar:</span>
               <span className="text-2xl font-black text-slate-800">
-                ${getTotalPrice()}
+                ${getTotalPrice().toFixed(1)}
               </span>
             </div>
 

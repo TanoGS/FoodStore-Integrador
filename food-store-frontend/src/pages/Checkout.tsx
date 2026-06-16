@@ -473,7 +473,7 @@ export default function Checkout() {
               </div>
               <div className="flex justify-between items-center pt-2">
                 <span className="text-xl font-black text-slate-800">Total</span>
-                <span className="text-2xl font-black text-blue-600">${finalTotal}</span>
+                <span className="text-2xl font-black text-blue-600">${finalTotal.toFixed(1)}</span>
               </div>
             </div>
 
