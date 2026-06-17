@@ -1,5 +1,5 @@
-from fastapi import HTTPException, status
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
+from core.exceptions import NotFoundError, ForbiddenError, UnauthorizedError, BadRequestError, ConflictError, UnprocessableError, ServiceUnavailableError, BadGatewayError
 from sqlmodel import Session
 
 from .unit_of_work import IngredienteUnitOfWork
@@ -41,9 +41,7 @@ class IngredienteService:
         with uow:
             ingrediente = uow.ingredientes.get_activo(ingrediente_id)
         if not ingrediente:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Ingrediente no encontrado",
+            raise NotFoundError("Ingrediente no encontrado",
             )
         return IngredientePublic.model_validate(ingrediente)
 
@@ -54,9 +52,7 @@ class IngredienteService:
         with uow:
             ingrediente = uow.ingredientes.get_activo(ingrediente_id)
             if not ingrediente:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Ingrediente no encontrado",
+                raise NotFoundError("Ingrediente no encontrado",
                 )
             for key, value in data.model_dump(exclude_unset=True).items():
                 setattr(ingrediente, key, value)
@@ -69,16 +65,11 @@ class IngredienteService:
         with uow:
             ingrediente = uow.ingredientes.get_activo(ingrediente_id)
             if not ingrediente:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Ingrediente no encontrado",
+                raise NotFoundError("Ingrediente no encontrado",
                 )
             # RN: no se puede eliminar si está en la receta de un producto activo
             if uow.ingredientes.has_active_recipes(ingrediente_id):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="No se puede eliminar: el ingrediente está en la receta de uno o más productos activos.",
-                )
+                raise ConflictError("No se puede eliminar: el ingrediente está en la receta de uno o más productos activos.")
             ingrediente.eliminado_en = datetime.now(timezone.utc)
             ingrediente.actualizado_en = datetime.now(timezone.utc)
             uow.ingredientes.add(ingrediente)
@@ -90,9 +81,7 @@ class IngredienteService:
             # Usamos get_by_id (sin filtro de eliminado) para encontrarlo
             ingrediente = uow.ingredientes.get_by_id(ingrediente_id)
             if not ingrediente:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Ingrediente no encontrado",
+                raise NotFoundError("Ingrediente no encontrado",
                 )
             ingrediente.eliminado_en = None
             ingrediente.actualizado_en = datetime.now(timezone.utc)

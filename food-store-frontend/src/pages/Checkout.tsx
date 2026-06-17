@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { initMercadoPago, Wallet } from '@mercadopago/sdk-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { DireccionService, type Direccion } from '../services/direccion.service';
@@ -7,9 +8,16 @@ import { PedidoService } from '../services/pedido.service';
 import { PagosService } from '../services/pagos.service';
 import {
   MapPin, ShoppingBag, CreditCard, ArrowLeft, Loader2, Plus,
-  Banknote, Smartphone, Check, Clock, ExternalLink, Store, Truck,
+  Banknote, Smartphone, Check, Clock, Store, Truck,
   AlertCircle, XCircle, CheckCircle2,
 } from 'lucide-react';
+
+// Inicializar SDK de MercadoPago con la public key del entorno.
+// VITE_MP_PUBLIC_KEY debe definirse en .env.local del frontend.
+const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY as string | undefined;
+if (MP_PUBLIC_KEY) {
+  initMercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' });
+}
 
 type FormaPagoCodigo = 'EFECTIVO' | 'MERCADOPAGO';
 export type TipoEntrega = 'EN_LOCAL' | 'DELIVERY';
@@ -53,20 +61,23 @@ export default function Checkout() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paso, setPaso] = useState<'creando' | 'pagando' | 'redirigiendo'>('creando');
+  // ID de preference de MercadoPago para renderizar el Wallet brick
+  const [mpPreferenceId, setMpPreferenceId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Redirect if not authenticated or cart empty
+  // Don't redirect when cart was just cleared for MP payment (mpPreferenceId is set)
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login?redirect=checkout');
       return;
     }
-    if (items.length === 0) {
+    if (items.length === 0 && !mpPreferenceId) {
       navigate('/');
       return;
     }
-  }, [isAuthenticated, items.length, navigate]);
+  }, [isAuthenticated, items.length, navigate, mpPreferenceId]);
 
   // Load direcciones and set defaults
   useEffect(() => {
@@ -145,14 +156,21 @@ export default function Checkout() {
         return;
       }
 
-      // MERCADOPAGO → redirigir a MP
+      // MERCADOPAGO → obtener preference y renderizar Wallet brick
       setPaso('pagando');
       const pago = await PagosService.crear(pedidoCreado.id);
 
-      if (pago.init_point) {
-        setPaso('redirigiendo');
+      if (pago.preference_id && MP_PUBLIC_KEY) {
+        // Tenemos preference_id y clave pública → mostramos el Wallet brick de MP nativo
         clearCart();
-        window.location.href = pago.init_point;
+        setMpPreferenceId(pago.preference_id);
+        setPaso('redirigiendo');
+      } else if (pago.init_point) {
+        // Fallback: preference_id sin clave pública, o sin preference_id → redirigir externamente
+        clearCart();
+        setPaso('redirigiendo');
+        // Small delay to let React process clearCart before navigating away
+        setTimeout(() => { window.location.href = pago.init_point!; }, 50);
       } else {
         alert(
           "No se pudo obtener el link de pago de MercadoPago.\n" +
@@ -479,12 +497,22 @@ export default function Checkout() {
 
             <button
               onClick={handleFinalizarPedido}
-              disabled={isSubmitting || requiresDireccion}
+              disabled={isSubmitting || requiresDireccion || !!mpPreferenceId}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-4 rounded-2xl font-black text-lg mt-8 transition-all shadow-lg active:scale-95 flex justify-center items-center gap-2"
               title={requiresDireccion ? 'Seleccioná una dirección de entrega para continuar' : undefined}
             >
               {botonLabel}
             </button>
+
+            {/* Wallet brick de MercadoPago — aparece tras crear la preference */}
+            {mpPreferenceId && MP_PUBLIC_KEY && (
+              <div className="mt-4">
+                <Wallet
+                  initialization={{ preferenceId: mpPreferenceId }}
+                  customization={{ texts: { valueProp: 'smart_option' } }}
+                />
+              </div>
+            )}
 
             <p className="text-[10px] text-slate-400 text-center mt-3">
               Al confirmar aceptás los términos de servicio de MercadoPago.

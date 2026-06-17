@@ -1,9 +1,32 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useState } from 'react';
-import { User, LogIn, LogOut, Settings, MapPin, ShoppingCart, ShoppingBag } from 'lucide-react';
+import { User, LogIn, LogOut, Settings, MapPin, ShoppingCart, ShoppingBag, Wifi, WifiOff } from 'lucide-react';
 import { useCartStore } from '../../store/cartStore';
+import { useWSStore } from '../../store/wsStore';
 import CartDrawer from '../layout/CartDrawer';
+
+// Badge compacto de estado WebSocket
+const WSBadge = () => {
+  const estado = useWSStore((s) => s.estado);
+  if (estado === 'open') return null; // conexión normal: no molestar al usuario
+
+  const config: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
+    connecting:    { label: 'Conectando…',      cls: 'text-yellow-400',  icon: <Wifi className="w-3.5 h-3.5 animate-pulse" /> },
+    reconnecting:  { label: 'Reconectando…',    cls: 'text-yellow-400',  icon: <Wifi className="w-3.5 h-3.5 animate-pulse" /> },
+    closed:        { label: 'Sin tiempo real', cls: 'text-slate-400',    icon: <WifiOff className="w-3.5 h-3.5" /> },
+    error:         { label: 'Sin tiempo real', cls: 'text-red-400',      icon: <WifiOff className="w-3.5 h-3.5" /> },
+    idle:          { label: 'Sin tiempo real', cls: 'text-slate-400',    icon: <WifiOff className="w-3.5 h-3.5" /> },
+  };
+  const c = config[estado];
+  if (!c) return null;
+
+  return (
+    <span className={`hidden sm:flex items-center gap-1 text-xs font-medium ${c.cls}`}>
+      {c.icon}{c.label}
+    </span>
+  );
+};
 
 const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -28,6 +51,7 @@ const Navbar = () => {
       </Link>
 
       <div className="flex items-center gap-5">
+        {isAuthenticated && <WSBadge />}
         
         {isAuthenticated ? (
           <>

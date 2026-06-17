@@ -1,8 +1,11 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from typing import Dict, List, NamedTuple, Optional
 
-from fastapi import HTTPException, status
 from sqlmodel import Session, select
+
+from core.exceptions import (
+    NotFoundError, ForbiddenError, BadRequestError, UnprocessableError, ConflictError
+)
 
 from .models import (
     EstadoPedido,
@@ -24,6 +27,15 @@ from .schemas import (
     DireccionResumida,
     DetallePedidoPublic,
 )
+from .events import (
+    ROOM_STAFF_PEDIDOS,
+    room_user,
+    serialize_pedido_creado,
+    serialize_pedido_estado_cambiado,
+    serialize_pedido_mio_actualizado,
+    serialize_stock_alerta,
+)
+from .ws_manager import ws_manager
 from app.modules.catalogo.producto.models import Producto
 from app.modules.catalogo.ingrediente.models import Ingrediente
 from core.settings_runtime import get_costo_envio_delivery
@@ -77,7 +89,7 @@ class PedidoService:
     # ====================================================================
     # 1. CREAR PEDIDO — TRANSACCIÓN ATÓMICA CON UNIT OF WORK
     # ====================================================================
-    def crear_pedido(self, usuario_id: int, datos: PedidoCreate) -> PedidoCambioResult:
+    async def crear_pedido(self, usuario_id: int, datos: PedidoCreate) -> PedidoCambioResult:
         # ── Validar stock ANTES de iniciar la transacción ──────────────────
         # Se construye una preview del pedido sin persistir nada.
         # Si falta stock, se lanza un error 400 antes de entrar al UoW.
@@ -85,75 +97,14 @@ class PedidoService:
         # el frontend del cliente muestra un mensaje genérico al usuario.
         faltantes_stock = self._obtener_resumen_stock_preview(datos)
         if faltantes_stock:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
+            raise BadRequestError({
                     "error": "stock_insuficiente",
                     "faltantes": faltantes_stock,
-                },
-            )
+                })
 
         with PedidoUnitOfWork(self._session) as uow:
-            # 1. Validar productos y construir snapshots (precio + nombre congelados)
-            detalles: List[DetallePedido] = []
-            subtotal = 0.0
-            # Mapa temporal producto_id → nombres de ingredientes removidos.
-            # Se usa para enriquecer la respuesta Pydantic (no se persiste en la DB).
-            nombres_por_producto: Dict[int, List[str]] = {}
-
-            for item in datos.detalles:
-                producto = self._session.get(Producto, item.producto_id)
-                if not producto or not producto.activo:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Producto {item.producto_id} no disponible.",
-                    )
-
-                # Validar personalizaciones (ingredientes removidos)
-                if item.personalizacion:
-                    ingredientes_producto = {
-                        e.ingrediente_id: e for e in producto.ingredientes_enlaces
-                    }
-                    for ing_id in item.personalizacion:
-                        enlace = ingredientes_producto.get(ing_id)
-                        if enlace is None:
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"El ingrediente {ing_id} no pertenece al producto.",
-                            )
-                        if not enlace.es_removible:
-                            nombre = getattr(enlace.ingrediente, "nombre", str(ing_id))
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"El ingrediente '{nombre}' no es removible.",
-                            )
-
-                precio = float(producto.precio)
-                sub = round(precio * item.cantidad, 2)
-                subtotal += sub
-
-                # Construir lista de nombres de ingredientes removidos
-                nombres_removidos = None
-                if item.personalizacion:
-                    nombres_removidos = [
-                        ingredientes_producto[pid].ingrediente.nombre
-                        for pid in item.personalizacion
-                        if pid in ingredientes_producto
-                    ]
-
-                # Guardar nombres removidos en el mapa temporal para uso en la respuesta
-                if nombres_removidos:
-                    nombres_por_producto[item.producto_id] = nombres_removidos
-
-                detalle = DetallePedido(
-                    producto_id=item.producto_id,
-                    cantidad=item.cantidad,
-                    nombre_snapshot=producto.nombre,
-                    precio_snapshot=precio,
-                    subtotal_snap=sub,
-                    personalizacion=item.personalizacion,
-                )
-                detalles.append(detalle)
+            # 1. Validar productos y construir snapshots
+            detalles, subtotal, nombres_por_producto = self._construir_detalles(datos)
 
             # 2. Calcular totales
             descuento = 0.0
@@ -211,15 +162,34 @@ class PedidoService:
                     detalle_pyd.producto_id
                 )
 
-            return PedidoCambioResult(
+            result = PedidoCambioResult(
                 pedido=response,
                 historial=HistorialEstadoPublic.model_validate(historial),
             )
 
+        # RN-06: broadcast DESPUÉS del commit (fuera del bloque UoW)
+        await ws_manager.broadcast(
+            ROOM_STAFF_PEDIDOS,
+            serialize_pedido_creado(result.pedido),
+        )
+        await ws_manager.broadcast(
+            room_user(result.pedido.usuario_id),
+            serialize_pedido_mio_actualizado(
+                id_=result.pedido.id,
+                estado_codigo=result.pedido.estado_codigo,
+                actualizado_en=(
+                    result.pedido.actualizado_en.isoformat()
+                    if result.pedido.actualizado_en
+                    else result.pedido.creado_en.isoformat()
+                ),
+            ),
+        )
+        return result
+
     # ====================================================================
     # 2. AVANZAR ESTADO — STAFF (ADMIN / GESTOR_PEDIDOS / CAJERO / COCINA)
     # ====================================================================
-    def avanzar_estado(
+    async def avanzar_estado(
         self,
         pedido_id: int,
         datos: AvanzarEstadoRequest,
@@ -228,10 +198,7 @@ class PedidoService:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = uow.pedidos.get_by_id_with_details(pedido_id)
             if not pedido:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Pedido {pedido_id} no encontrado.",
-                )
+                raise NotFoundError(f"Pedido {pedido_id} no encontrado.")
 
             estado_actual = pedido.estado_codigo
             estado_nuevo = datos.estado_hacia.value
@@ -239,17 +206,11 @@ class PedidoService:
             # Validar transición FSM
             permitidos = [e.value for e in _FSM.get(estado_actual, [])]
             if estado_nuevo not in permitidos:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Transición inválida: {estado_actual} → {estado_nuevo}.",
-                )
+                raise UnprocessableError(f"Transición inválida: {estado_actual} → {estado_nuevo}.")
 
             # RN-05: motivo obligatorio al cancelar
             if estado_nuevo == EstadoPedido.CANCELADO.value and not datos.motivo:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="El motivo es obligatorio al cancelar.",
-                )
+                raise UnprocessableError("El motivo es obligatorio al cancelar.")
 
             # Descontar stock al confirmar el pedido y detectar alerta
             stock_bajo: Optional[List[dict]] = None
@@ -282,16 +243,47 @@ class PedidoService:
             self._session.refresh(historial)
             response = PedidoPublic.model_validate(pedido)
             self._enriquecer_personalizaciones([response])
-            return PedidoCambioResult(
+            result = PedidoCambioResult(
                 pedido=response,
                 historial=HistorialEstadoPublic.model_validate(historial),
                 stock_bajo=stock_bajo,
             )
 
+        # RN-06: broadcast DESPUÉS del commit
+        await ws_manager.broadcast(
+            ROOM_STAFF_PEDIDOS,
+            serialize_pedido_estado_cambiado(
+                pedido=result.pedido,
+                estado_desde=result.historial.estado_desde,
+                estado_hacia=result.historial.estado_hacia,
+                usuario_actor_id=result.historial.usuario_id,
+                motivo=result.historial.motivo,
+                historial=result.historial,
+            ),
+        )
+        await ws_manager.broadcast(
+            room_user(result.pedido.usuario_id),
+            serialize_pedido_mio_actualizado(
+                id_=result.pedido.id,
+                estado_codigo=result.pedido.estado_codigo,
+                actualizado_en=(
+                    result.pedido.actualizado_en.isoformat()
+                    if result.pedido.actualizado_en
+                    else None
+                ),
+            ),
+        )
+        if result.stock_bajo:
+            await ws_manager.broadcast(
+                ROOM_STAFF_PEDIDOS,
+                serialize_stock_alerta(result.stock_bajo),
+            )
+        return result
+
     # ====================================================================
     # 3. CANCELAR PEDIDO — CLIENTE O STAFF
     # ====================================================================
-    def cancelar_pedido(
+    async def cancelar_pedido(
         self,
         pedido_id: int,
         motivo: str,
@@ -301,19 +293,13 @@ class PedidoService:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = uow.pedidos.get_by_id_with_details(pedido_id)
             if not pedido:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Pedido {pedido_id} no encontrado.",
-                )
+                raise NotFoundError(f"Pedido {pedido_id} no encontrado.")
 
             es_privilegiado = self._es_staff(roles)
 
             # Verificar propiedad del pedido para clientes
             if not es_privilegiado and pedido.usuario_id != usuario_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes permiso para cancelar este pedido.",
-                )
+                raise ForbiddenError("No tienes permiso para cancelar este pedido.")
 
             estado_actual = pedido.estado_codigo
 
@@ -321,17 +307,11 @@ class PedidoService:
             if not es_privilegiado:
                 estados_cancelables = {e.value for e in _CANCELACION_CLIENTE}
                 if estado_actual not in estados_cancelables:
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=f"Solo puedes cancelar desde PENDIENTE o CONFIRMADO. Estado actual: {estado_actual}.",
-                    )
+                    raise UnprocessableError(f"Solo puedes cancelar desde PENDIENTE o CONFIRMADO. Estado actual: {estado_actual}.")
 
             # Verificar que el FSM permite cancelar desde este estado
             if EstadoPedido.CANCELADO.value not in [e.value for e in _FSM.get(estado_actual, [])]:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"No se puede cancelar desde el estado {estado_actual}.",
-                )
+                raise UnprocessableError(f"No se puede cancelar desde el estado {estado_actual}.")
 
             # Devolver stock si el pedido ya estaba confirmado
             # (stock solo se descuenta al pasar a CONFIRMADO)
@@ -358,10 +338,36 @@ class PedidoService:
             self._session.refresh(historial)
             response = PedidoPublic.model_validate(pedido)
             self._enriquecer_personalizaciones([response])
-            return PedidoCambioResult(
+            result = PedidoCambioResult(
                 pedido=response,
                 historial=HistorialEstadoPublic.model_validate(historial),
             )
+
+        # RN-06: broadcast DESPUÉS del commit
+        await ws_manager.broadcast(
+            ROOM_STAFF_PEDIDOS,
+            serialize_pedido_estado_cambiado(
+                pedido=result.pedido,
+                estado_desde=result.historial.estado_desde,
+                estado_hacia=result.historial.estado_hacia,
+                usuario_actor_id=result.historial.usuario_id,
+                motivo=result.historial.motivo,
+                historial=result.historial,
+            ),
+        )
+        await ws_manager.broadcast(
+            room_user(result.pedido.usuario_id),
+            serialize_pedido_mio_actualizado(
+                id_=result.pedido.id,
+                estado_codigo=result.pedido.estado_codigo,
+                actualizado_en=(
+                    result.pedido.actualizado_en.isoformat()
+                    if result.pedido.actualizado_en
+                    else None
+                ),
+            ),
+        )
+        return result
 
     # ====================================================================
     # 4. LISTAR PEDIDOS — PAGINADO
@@ -404,17 +410,11 @@ class PedidoService:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = uow.pedidos.get_by_id_with_details(pedido_id)
             if not pedido:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Pedido {pedido_id} no encontrado.",
-                )
+                raise NotFoundError(f"Pedido {pedido_id} no encontrado.")
 
             es_privilegiado = self._es_staff(roles)
             if not es_privilegiado and pedido.usuario_id != usuario_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes permiso para ver este pedido.",
-                )
+                raise ForbiddenError("No tienes permiso para ver este pedido.")
 
             response = PedidoPublic.model_validate(pedido)
             self._enriquecer_personalizaciones([response])
@@ -457,6 +457,74 @@ class PedidoService:
         sobre pedidos (ADMIN, GESTOR_PEDIDOS, CAJERO, COCINA).
         """
         return any(r in roles for r in _ROLES_STAFF_PEDIDOS)
+
+    def _construir_detalles(
+        self,
+        datos: "PedidoCreate",
+    ) -> "tuple[List[DetallePedido], float, Dict[int, List[str]]]":
+        """
+        Construye los objetos `DetallePedido` a partir del request.
+
+        Valida:
+        - Que cada producto exista y esté activo.
+        - Que las personalizaciones solo incluyan ingredientes del producto y
+          que esos ingredientes sean removibles.
+
+        Retorna:
+        - detalles: lista de DetallePedido (sin pedido_id — se asigna después del flush)
+        - subtotal: suma de subtotales de cada ítem
+        - nombres_por_producto: mapa producto_id → nombres de ingredientes removidos
+          (para enriquecer la respuesta Pydantic sin persistir en BD)
+        """
+        detalles: List[DetallePedido] = []
+        subtotal = 0.0
+        nombres_por_producto: Dict[int, List[str]] = {}
+
+        for item in datos.detalles:
+            producto = self._session.get(Producto, item.producto_id)
+            if not producto or not producto.activo:
+                raise NotFoundError(f"Producto {item.producto_id} no disponible.")
+
+            ingredientes_producto: Dict[int, object] = {}
+            if item.personalizacion:
+                ingredientes_producto = {
+                    e.ingrediente_id: e for e in producto.ingredientes_enlaces
+                }
+                for ing_id in item.personalizacion:
+                    enlace = ingredientes_producto.get(ing_id)
+                    if enlace is None:
+                        raise BadRequestError(
+                            f"El ingrediente {ing_id} no pertenece al producto."
+                        )
+                    if not enlace.es_removible:  # type: ignore[attr-defined]
+                        nombre = getattr(enlace.ingrediente, "nombre", str(ing_id))  # type: ignore[attr-defined]
+                        raise BadRequestError(f"El ingrediente '{nombre}' no es removible.")
+
+            precio = float(producto.precio)
+            sub = round(precio * item.cantidad, 2)
+            subtotal += sub
+
+            if item.personalizacion:
+                nombres_removidos = [
+                    ingredientes_producto[pid].ingrediente.nombre  # type: ignore[attr-defined]
+                    for pid in item.personalizacion
+                    if pid in ingredientes_producto
+                ]
+                if nombres_removidos:
+                    nombres_por_producto[item.producto_id] = nombres_removidos
+
+            detalles.append(
+                DetallePedido(
+                    producto_id=item.producto_id,
+                    cantidad=item.cantidad,
+                    nombre_snapshot=producto.nombre,
+                    precio_snapshot=precio,
+                    subtotal_snap=sub,
+                    personalizacion=item.personalizacion,
+                )
+            )
+
+        return detalles, subtotal, nombres_por_producto
 
     # ====================================================================
     # 10. HELPER: ENRIQUECER PERSONALIZACIONES CON NOMBRES LEGIBLES
@@ -539,10 +607,7 @@ class PedidoService:
         if self._es_staff(roles):
             return
         if pedido.usuario_id != usuario_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para acceder a este pedido.",
-            )
+            raise ForbiddenError("No tienes permiso para acceder a este pedido.")
 
     def _construir_pedido_admin(self, pedido: Pedido) -> PedidoAdmin:
         """
@@ -698,13 +763,8 @@ class PedidoService:
                     })
 
         if faltantes:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "error": "stock_insuficiente_al_confirmar",
-                    "pedido_id": pedido.id,
-                    "faltantes": faltantes,
-                },
+            raise ConflictError(
+                f"stock_insuficiente_al_confirmar: pedido_id={faltantes[0].get('pedido_id', '?')}"
             )
 
         # ── Descuento real ──

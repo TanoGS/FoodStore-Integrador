@@ -18,37 +18,25 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // 1. Llamamos al backend. 
-      // El backend debería devolvernos el token y los datos del usuario
       const respuesta = await AuthService.login(email, password);
-      //console.log("🔥 RESPUESTA BRUTA DEL BACKEND:", respuesta);
+      // El token viene en el body y es necesario para conectar el WebSocket.
+      const datosUsuario = respuesta.usuario;
+      setLogin(datosUsuario, respuesta.access_token);
 
-      // Extraemos el token (FastAPI suele mandarlo como access_token)
-      // Extraemos el usuario (dependiendo de cómo armaste tu JSON en el backend)
-      const tokenJWT = respuesta.access_token || respuesta.token;
-      const datosUsuario = respuesta.usuario || respuesta;
-
-      // 🚨 Validamos que el token realmente haya llegado
-      if (!tokenJWT) {
-        throw new Error("El backend no devolvió un token de seguridad.");
-      }
-
-      // 2. Guardamos la LLAVE REAL y el usuario en Zustand
-      setLogin(tokenJWT, datosUsuario); 
-
-      // 3. Redirigimos según el rol — cualquier rol de staff va al panel
+      // Redirigimos según el rol — cualquier rol de staff va al panel
       const esStaff = datosUsuario.roles?.some(
-        (r: any) =>
+        (r: { codigo: string }) =>
           r.codigo === 'ADMIN' ||
           r.codigo === 'GESTOR_STOCK' ||
           r.codigo === 'GESTOR_PEDIDOS' ||
+          r.codigo === 'CAJERO' ||
           r.codigo === 'COCINA'
       );
 
       if (esStaff) {
-        navigate('/admin'); // Panel de gestión
+        navigate('/admin');
       } else {
-        navigate('/'); // Redirige a la tienda para el cliente normal
+        navigate('/');
       }
       
     } catch (err: any) {

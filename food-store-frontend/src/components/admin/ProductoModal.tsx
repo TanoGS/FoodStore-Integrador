@@ -28,6 +28,7 @@ export interface ProductoEditar {
   nombre:                string;
   descripcion?:          string | null;
   imagen_url?:           string | null;
+  imagenes_url?:         string[] | null;
   stock_cantidad:        number;
   activo:                boolean;
   margen_ganancia:       number;
@@ -146,7 +147,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
       if (productoEditar) {
         setNombre(productoEditar.nombre || '');
         setDescripcion(productoEditar.descripcion || '');
-        setImagenUrl(productoEditar.imagen_url || '');
+        setImagenUrl((productoEditar.imagenes_url?.[0] ?? productoEditar.imagen_url) || '');
         setStock(productoEditar.stock_cantidad ?? '');
         setActivo(productoEditar.activo !== false);
         setMargenGanancia(productoEditar.margen_ganancia ?? 90);
@@ -176,7 +177,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
         setInitialState({
           nombre:              productoEditar.nombre || '',
           descripcion:         productoEditar.descripcion || '',
-          imagen_url:          productoEditar.imagen_url || '',
+          imagen_url:          (productoEditar.imagenes_url?.[0] ?? productoEditar.imagen_url) || '',
           stock_cantidad:      productoEditar.stock_cantidad ?? 0,
           activo:              productoEditar.activo !== false,
           margen_ganancia:     productoEditar.margen_ganancia ?? 90,
@@ -290,7 +291,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
 
       if (nombre !== initialState.nombre)              payload.nombre = nombre;
       if ((descripcion || '') !== initialState.descripcion) payload.descripcion = descripcion || null;
-      if ((imagenUrl || '') !== initialState.imagen_url) payload.imagen_url = imagenUrl || null;
+      if ((imagenUrl || '') !== initialState.imagen_url) payload.imagenes_url = imagenUrl ? [imagenUrl] : null;
       if ((stock === '' ? 0 : Number(stock)) !== initialState.stock_cantidad) payload.stock_cantidad = stock === '' ? 0 : Number(stock);
       if (Number(margenGanancia) !== initialState.margen_ganancia) payload.margen_ganancia = Number(margenGanancia);
       if ((precioManual === '' ? null : Number(precioManual)) !== initialState.precio) payload.precio_manual = precioManual === '' ? null : Number(precioManual);
@@ -311,7 +312,7 @@ export default function ProductoModal({ productoEditar, onClose, onSave, isSavin
       const payload: Record<string, unknown> = {
         nombre,
         descripcion:     descripcion || null,
-        imagen_url:      imagenUrl   || null,
+        imagenes_url:    imagenUrl   ? [imagenUrl] : null,
         stock_cantidad:  stock === '' ? 0 : Number(stock),
         activo,
         categoria_ids:   [categoriaId],

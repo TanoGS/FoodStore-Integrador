@@ -2,71 +2,67 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
-  // Necesario para que el navegador envíe y reciba la cookie httpOnly del login
+  // withCredentials: true → el navegador envía automáticamente la cookie
+  // HttpOnly `access_token` en cada request. No necesitamos leer el token
+  // manualmente ni incluirlo en el header Authorization.
   withCredentials: true,
 });
 
-// INTERCEPTOR DE PETICIONES (Agrega el Token directo del Storage)
-api.interceptors.request.use(
-  (config) => {
-    let token = null;
+// ─── Interceptor de respuestas: refresh automático ────────────────────────────
+// Cuando el servidor devuelve 401, intentamos renovar el access token usando
+// la cookie `refresh_token` (HttpOnly, enviada automáticamente). Si el refresh
+// falla → logout.
 
-    // 1. Leemos del storage. sessionStorage primero porque es donde
-    //    AHORA vive el authStore (desde el cambio a multi-user-multi-tab).
-    //    localStorage queda como fallback por si quedó algo viejo de
-    //    antes del cambio.
-    //    La clave debe coincidir con el `name` del persist en store/authStore.ts
-    const KEY = 'food-store-auth';
-    const fromSession = sessionStorage.getItem(KEY);
-    const fromLocal   = localStorage.getItem(KEY);
-    const authStorageStr = fromSession ?? fromLocal;
+let _isRefreshing = false;
+let _refreshQueue: Array<(ok: boolean) => void> = [];
 
-    if (authStorageStr) {
+function _processQueue(ok: boolean) {
+  _refreshQueue.forEach((cb) => cb(ok));
+  _refreshQueue = [];
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config;
+
+    // Solo actuar en 401, y no en la propia ruta de refresh/login/logout.
+    const isAuthRoute = ['/usuarios/login', '/usuarios/refresh', '/usuarios/logout']
+      .some((path) => original?.url?.includes(path));
+
+    if (error.response?.status === 401 && !isAuthRoute && !original._retry) {
+      if (_isRefreshing) {
+        // Ya hay un refresh en curso — encolar y esperar resultado.
+        return new Promise((resolve, reject) => {
+          _refreshQueue.push((ok) => {
+            if (ok) resolve(api(original));
+            else reject(error);
+          });
+        });
+      }
+
+      original._retry = true;
+      _isRefreshing = true;
+
       try {
-        const parsedData = JSON.parse(authStorageStr);
-        token = parsedData.state?.token;
-      } catch (error) {
-        console.error("Error parseando el token", error);
+        // Intentar renovar. La cookie `refresh_token` va automáticamente.
+        await api.post('/usuarios/refresh');
+        _processQueue(true);
+        return api(original); // reintentar el request original
+      } catch {
+        _processQueue(false);
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+        return Promise.reject(error);
+      } finally {
+        _isRefreshing = false;
       }
     }
 
-    // 2. Fallback: Si no lo encontró en el storage, intentamos con el Store
-    if (!token) {
-      token = useAuthStore.getState().token;
-    }
-
-   if (token && config.headers) {
-      // Le avisamos a la consola para auditar
-     // console.log("🔑 [AXIOS] Enviando petición a:", config.url, "con token:", token.substring(0, 15) + "...");
-      config.headers.Authorization = `Bearer ${token}`;
-    } else {
-     // console.warn(" [AXIOS] CUIDADO: Haciendo petición SIN TOKEN a:", config.url);
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// INTERCEPTOR DE RESPUESTAS (Maneja token expirado → redirige al login)
-api.interceptors.response.use(
-  (response) => response, // Respuestas 2xx pasan directo
-  (error) => {
-    // Ignorar 401 en rutas de validación de contraseña (no es token expirado)
-    const isPasswordValidation = error.config?.url?.includes('/cambiar-password');
-    
-    if (error.response?.status === 401 && !isPasswordValidation) {
-      console.warn('⛔ [AXIOS] Token expirado o inválido. Cerrando sesión...');
-      // Limpiamos el store de autenticación
-      useAuthStore.getState().logout();
-      // Redirigimos al login sin recargar toda la SPA
-      window.location.href = '/login';
-    }
     return Promise.reject(error);
   }
 );

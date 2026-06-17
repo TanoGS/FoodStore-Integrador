@@ -1,42 +1,45 @@
-from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import BigInteger, DateTime # Importamos los tipos nativos de SQLAlchemy
+﻿from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import BigInteger, DateTime, String
 from typing import List, Optional
-from datetime import datetime
-import app
+from datetime import datetime, timezone
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 # ==============================================================================
 # 1. TABLA INTERMEDIA: usuarios_roles
 # ==============================================================================
 class UsuarioRol(SQLModel, table=True):
     __tablename__ = "usuarios_roles"
-    
+
     usuario_id: int = Field(
-        default=None, 
-        foreign_key="usuarios.id", 
+        default=None,
+        foreign_key="usuarios.id",
         primary_key=True,
-        sa_type=BigInteger  
+        sa_type=BigInteger,
     )
     rol_codigo: str = Field(
-        default=None, 
-        foreign_key="roles.codigo", 
+        default=None,
+        foreign_key="roles.codigo",
         primary_key=True,
-        max_length=20
+        max_length=20,
     )
-    
     asignado_por_id: Optional[int] = Field(
-        default=None, 
+        default=None,
         foreign_key="usuarios.id",
-        sa_type=BigInteger,  
-        nullable=True
+        sa_type=BigInteger,
+        nullable=True,
     )
-    #  Usamos DateTime con soporte de zona horaria
     expires_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
 
     usuario: "Usuario" = Relationship(
         back_populates="roles_enlaces",
-        sa_relationship_kwargs={"foreign_keys": "[UsuarioRol.usuario_id]"}
+        sa_relationship_kwargs={"foreign_keys": "[UsuarioRol.usuario_id]"},
     )
     asignador: Optional["Usuario"] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[UsuarioRol.asignado_por_id]"}
+        sa_relationship_kwargs={"foreign_keys": "[UsuarioRol.asignado_por_id]"},
     )
     rol: "Rol" = Relationship(back_populates="usuarios_enlaces")
 
@@ -46,7 +49,7 @@ class UsuarioRol(SQLModel, table=True):
 # ==============================================================================
 class RolPermiso(SQLModel, table=True):
     __tablename__ = "roles_permisos"
-    
+
     rol_codigo: str = Field(default=None, foreign_key="roles.codigo", primary_key=True, max_length=20)
     permiso_id: int = Field(default=None, foreign_key="permisos.id", primary_key=True)
 
@@ -56,11 +59,11 @@ class RolPermiso(SQLModel, table=True):
 # ==============================================================================
 class Permiso(SQLModel, table=True):
     __tablename__ = "permisos"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     nombre: str = Field(unique=True, index=True, max_length=50)
     descripcion: Optional[str] = Field(default=None, max_length=255)
-    
+
     roles: List["Rol"] = Relationship(back_populates="permisos", link_model=RolPermiso)
 
 
@@ -69,11 +72,11 @@ class Permiso(SQLModel, table=True):
 # ==============================================================================
 class Rol(SQLModel, table=True):
     __tablename__ = "roles"
-    
+
     codigo: str = Field(primary_key=True, max_length=20)
     nombre: str = Field(unique=True, index=True, max_length=50)
     descripcion: Optional[str] = Field(default=None, max_length=255)
-    
+
     usuarios_enlaces: List[UsuarioRol] = Relationship(back_populates="rol")
     permisos: List[Permiso] = Relationship(back_populates="roles", link_model=RolPermiso)
 
@@ -83,8 +86,7 @@ class Rol(SQLModel, table=True):
 # ==============================================================================
 class Usuario(SQLModel, table=True):
     __tablename__ = "usuarios"
-    
-   
+
     id: Optional[int] = Field(default=None, primary_key=True, sa_type=BigInteger)
     email: str = Field(unique=True, index=True, max_length=100)
     password: str = Field(max_length=255)
@@ -92,12 +94,43 @@ class Usuario(SQLModel, table=True):
     apellido: str = Field(max_length=50)
     cel: str = Field(max_length=20)
     activo: bool = Field(default=True)
-    
-    creado_en: datetime = Field(default_factory=datetime.utcnow)
-    actualizado_en: Optional[datetime] = Field(default=None)
-    eliminado_en: Optional[datetime] = Field(default=None)
-    
+
+    creado_en: datetime = Field(default_factory=_utc_now, sa_type=DateTime(timezone=True))
+    actualizado_en: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
+    eliminado_en: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
+
     roles_enlaces: List[UsuarioRol] = Relationship(
         back_populates="usuario",
-        sa_relationship_kwargs={"foreign_keys": "[UsuarioRol.usuario_id]", "cascade": "all, delete-orphan"}
+        sa_relationship_kwargs={
+            "foreign_keys": "[UsuarioRol.usuario_id]",
+            "cascade": "all, delete-orphan",
+        },
     )
+
+
+# ==============================================================================
+# 6. TABLA: refresh_tokens  (invalidacion server-side — spec 4.1)
+# ==============================================================================
+class RefreshToken(SQLModel, table=True):
+    __tablename__ = "refresh_tokens"
+
+    id: Optional[int] = Field(default=None, primary_key=True, sa_type=BigInteger)
+
+    # FK al usuario dueno del token.  ON DELETE CASCADE: si se borra el usuario,
+    # todos sus refresh tokens desaparecen automaticamente.
+    usuario_id: int = Field(
+        foreign_key="usuarios.id",
+        sa_type=BigInteger,
+        index=True,
+    )
+
+    # SHA-256 hex del token en claro (64 chars).
+    # Nunca almacenamos el token en claro.
+    token_hash: str = Field(sa_type=String(64), unique=True, index=True)
+
+    expires_at: datetime = Field(sa_type=DateTime(timezone=True))
+
+    # NULL = vigente.  Fecha = revocado (logout o rotacion).
+    revoked_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
+
+    creado_en: datetime = Field(default_factory=_utc_now, sa_type=DateTime(timezone=True))

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Servicio: PagoService
 =====================
 Encapsula la lógica de integración con MercadoPago.
@@ -9,10 +9,10 @@ Encapsula la lógica de integración con MercadoPago.
 import uuid
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 import mercadopago
-from fastapi import HTTPException
+from core.exceptions import NotFoundError, ForbiddenError, UnauthorizedError, BadRequestError, ConflictError, UnprocessableError, ServiceUnavailableError, BadGatewayError
 from sqlmodel import Session, select
 
 from core.config import settings
@@ -49,20 +49,20 @@ class PagoService:
         # 1. Buscar el pedido y validar
         pedido = self._session.get(Pedido, pedido_id)
         if not pedido:
-            raise HTTPException(status_code=404, detail="Pedido no encontrado")
+            raise NotFoundError("Pedido no encontrado")
         if pedido.usuario_id != usuario_id:
-            raise HTTPException(status_code=403, detail="No tienes permiso sobre este pedido")
+            raise ForbiddenError("No tienes permiso sobre este pedido")
         if pedido.forma_pago_codigo != "MERCADOPAGO":
-            raise HTTPException(status_code=400, detail="Este pedido no usa MercadoPago")
+            raise BadRequestError("Este pedido no usa MercadoPago")
         if pedido.estado_codigo not in ("PENDIENTE",):
-            raise HTTPException(status_code=400, detail=f"El pedido está en estado {pedido.estado_codigo}, no se puede pagar")
+            raise BadRequestError(f"El pedido está en estado {pedido.estado_codigo}, no se puede pagar")
 
         # 2. Verificar que no exista un pago ya creado (idempotencia por pedido)
         pago_existente = self._session.exec(
             select(Pago).where(Pago.pedido_id == pedido_id)
         ).first()
         if pago_existente and pago_existente.mp_status == "approved":
-            raise HTTPException(status_code=400, detail="Este pedido ya fue pagado")
+            raise BadRequestError("Este pedido ya fue pagado")
         if pago_existente and pago_existente.init_point and pago_existente.mp_status == "pending":
             # Reutilizar preference existente si aún está pendiente
             return PagoResponse.model_validate(pago_existente)
@@ -82,7 +82,7 @@ class PagoService:
         if self._sdk:
             try:
                 # Calcular URL publica del backend (vía ngrok) a partir de MP_NOTIFICATION_URL
-                backend_public_url = settings.MP_NOTIFICATION_URL.replace("/api/v1/pagos/webhook", "")
+                backend_public_url = settings.MP_NOTIFICATION_URL.replace(f"{settings.API_V1_STR}/pagos/webhook", "")
 
                 preference_data = {
                     "items": [
@@ -99,9 +99,9 @@ class PagoService:
                     # Las back_urls apuntan al BACKEND (vía ngrok), no al frontend.
                     # El backend luego redirige al frontend local.
                     "back_urls": {
-                        "success": f"{backend_public_url}/api/v1/pagos/redirect/success?pedido_id={pedido.id}",
-                        "failure": f"{backend_public_url}/api/v1/pagos/redirect/failure?pedido_id={pedido.id}",
-                        "pending": f"{backend_public_url}/api/v1/pagos/redirect/pending?pedido_id={pedido.id}",
+                        "success": f"{backend_public_url}{settings.API_V1_STR}/pagos/redirect/success?pedido_id={pedido.id}",
+                        "failure": f"{backend_public_url}{settings.API_V1_STR}/pagos/redirect/failure?pedido_id={pedido.id}",
+                        "pending": f"{backend_public_url}{settings.API_V1_STR}/pagos/redirect/pending?pedido_id={pedido.id}",
                     },
                     # "auto_return": "approved",  # Comentado: MP sandbox queda atascado en error page del 3DS
                     # El usuario debe hacer click en "Volver al sitio" para regresar al backend
@@ -133,7 +133,7 @@ class PagoService:
     # ─────────────────────────────────────────────────────────────────────
     # 2. PROCESAR WEBHOOK (IPN de MercadoPago)
     # ─────────────────────────────────────────────────────────────────────
-    def procesar_webhook(self, data: dict) -> dict:
+    async def procesar_webhook(self, data: dict) -> dict:
         """
         Recibe notificación de MercadoPago.
         Maneja dos tipos de topic:
@@ -158,7 +158,7 @@ class PagoService:
             if not payment_id:
                 logger.warning(f"Webhook topic=payment sin payment_id: {data}")
                 return {"status": "ok", "msg": "sin payment_id"}
-            return self._procesar_payment_id(payment_id)
+            return await self._procesar_payment_id(payment_id)
 
         # ── Topic: merchant_order ──────────────────────────────────────
         if topic == "merchant_order":
@@ -197,7 +197,7 @@ class PagoService:
             for pay_info in payments:
                 pid = pay_info.get("id")
                 if pid:
-                    r = self._procesar_payment_id(pid)
+                    r = await self._procesar_payment_id(pid)
                     results.append(r)
 
             return {"status": "ok", "merchant_order_id": merchant_order_id, "results": results}
@@ -206,7 +206,7 @@ class PagoService:
         logger.info(f"[MP] Topic '{topic}' ignorado (no es payment ni merchant_order)")
         return {"status": "ok", "msg": f"topic '{topic}' no soportado"}
 
-    def _procesar_payment_id(self, payment_id: int) -> dict:
+    async def _procesar_payment_id(self, payment_id: int) -> dict:
         """
         Consulta un payment en MP por su ID, actualiza el registro Pago
         y avanza el pedido a CONFIRMADO si corresponde.
@@ -218,12 +218,12 @@ class PagoService:
                 return {"status": "ok", "msg": "error consultando MP"}
 
             payment_info = mp_payment["response"]
-            return self._aplicar_estado_mp(payment_info, payment_id=payment_id)
+            return await self._aplicar_estado_mp(payment_info, payment_id=payment_id)
         except Exception as e:
             logger.error(f"Error en _procesar_payment_id({payment_id}): {e}", exc_info=True)
             return {"status": "ok", "msg": str(e)}
 
-    def _aplicar_estado_mp(
+    async def _aplicar_estado_mp(
         self,
         payment_info: dict,
         payment_id: int | None = None,
@@ -232,7 +232,22 @@ class PagoService:
         Aplica el estado de un pago de MP al registro Pago local y,
         si corresponde, avanza el pedido a CONFIRMADO.
         Se comparte entre _procesar_payment_id (webhook) y sincronizar_con_mp.
+
+        RN-06: tras modificar el pedido, emite los eventos de WebSocket
+        a la sala global de staff (pedido.estado.cambiado, stock.alerta)
+        y a la sala del usuario dueño (pedido.mio.actualizado).
         """
+        # ── Imports locales para evitar circularidad en nivel de módulo ──
+        from app.modules.pedido.events import (
+            ROOM_STAFF_PEDIDOS,
+            room_user,
+            serialize_pedido_estado_cambiado,
+            serialize_pedido_mio_actualizado,
+            serialize_stock_alerta,
+        )
+        from app.modules.pedido.schemas import PedidoPublic, HistorialEstadoPublic
+        from app.modules.pedido.ws_manager import ws_manager
+
         external_ref = payment_info.get("external_reference")
         if not external_ref:
             logger.warning(f"Pago {payment_id} sin external_reference")
@@ -254,6 +269,10 @@ class PagoService:
         pago.payment_method_id = payment_info.get("payment_method_id")
         pago.actualizado_en = _utc_now()
 
+        # Datos para el broadcast (se populated si el estado cambió)
+        broadcast_data: dict | None = None  # {pedido, historial, stock_bajo}
+        pedido_cambiado: Pedido | None = None
+
         # Si fue aprobado, avanzar el pedido a CONFIRMADO solo si es DELIVERY.
         # Para EN_LOCAL el cajero debe confirmar presencialmente (validar pago en caja).
         if pago.mp_status == "approved":
@@ -273,16 +292,34 @@ class PagoService:
                     )
                     self._session.add(historial)
 
-                    # Descontar stock de ingredientes (igual que avanzar_estado → CONFIRMADO)
-                    # Import local para evitar circular en nivel de módulo
+                    # Descontar stock de ingredientes y detectar alertas
+                    stock_bajo: Optional[List[dict]] = None
                     from app.modules.pedido.service import PedidoService
                     try:
-                        PedidoService(self._session)._descontar_stock(pedido)
+                        # _descontar_stock retorna cambios [{tipo, id, nombre, stock_anterior, stock_nuevo}]
+                        # _detectar_stock_bajo_actual convierte al formato requerido
+                        # por serialize_stock_alerta [{id, nombre, stock_actual, stock_seguridad, unidad}]
+                        cambios_stock = PedidoService(self._session)._descontar_stock(pedido)
+                        stock_bajo = PedidoService(self._session)._detectar_stock_bajo_actual(cambios_stock)
                     except Exception as e:
                         logger.warning(
-                            f"[MP] No se pudo descontar stock para pedido {pedido.id}: {e}. "
+                            f"[MP] No se pudo descontar/detectar stock para pedido {pedido.id}: {e}. "
                             "El pedido avanza a CONFIRMADO de todas formas."
                         )
+
+                    self._session.flush()
+                    self._session.refresh(pedido)
+                    self._session.refresh(historial)
+
+                    # Construir payloads para el broadcast
+                    pedido_public = PedidoPublic.model_validate(pedido)
+                    historial_public = HistorialEstadoPublic.model_validate(historial)
+                    pedido_cambiado = pedido
+                    broadcast_data = {
+                        "pedido":      pedido_public,
+                        "historial":    historial_public,
+                        "stock_bajo":   stock_bajo,
+                    }
 
                     logger.info(
                         f"[MP] Pedido {pedido.id} avanzar a CONFIRMADO "
@@ -298,6 +335,41 @@ class PagoService:
         self._session.add(pago)
         self._session.commit()
 
+        # ── RN-06: Broadcast por WebSocket DESPUÉS del commit ──
+        if broadcast_data and pedido_cambiado:
+            pedido_pub: PedidoPublic = broadcast_data["pedido"]
+            historial_pub: HistorialEstadoPublic = broadcast_data["historial"]
+            stock_bajo: Optional[List[dict]] = broadcast_data["stock_bajo"]
+
+            await ws_manager.broadcast(
+                ROOM_STAFF_PEDIDOS,
+                serialize_pedido_estado_cambiado(
+                    pedido=pedido_pub,
+                    estado_desde=historial_pub.estado_desde,
+                    estado_hacia=historial_pub.estado_hacia,
+                    usuario_actor_id=historial_pub.usuario_id,
+                    motivo=historial_pub.motivo,
+                    historial=historial_pub,
+                ),
+            )
+            await ws_manager.broadcast(
+                room_user(pedido_pub.usuario_id),
+                serialize_pedido_mio_actualizado(
+                    id_=pedido_pub.id,
+                    estado_codigo=pedido_pub.estado_codigo,
+                    actualizado_en=(
+                        pedido_pub.actualizado_en.isoformat()
+                        if pedido_pub.actualizado_en
+                        else None
+                    ),
+                ),
+            )
+            if stock_bajo:
+                await ws_manager.broadcast(
+                    ROOM_STAFF_PEDIDOS,
+                    serialize_stock_alerta(stock_bajo),
+                )
+
         return {"status": "ok", "pago_id": pago.id, "mp_status": pago.mp_status}
 
     # ─────────────────────────────────────────────────────────────────────
@@ -306,7 +378,7 @@ class PagoService:
     # ─────────────────────────────────────────────────────────────────────
     # 4. SINCRONIZAR CON MERCADOPAGO (Reconciliación bajo demanda)
     # ─────────────────────────────────────────────────────────────────────
-    def sincronizar_con_mp(self, pedido_id: int) -> PagoResponse:
+    async def sincronizar_con_mp(self, pedido_id: int) -> PagoResponse:
         """
         Consulta el estado real del pago en MercadoPago y actualiza el
         registro local. Útil cuando el webhook no llegó o el cajero
@@ -324,16 +396,12 @@ class PagoService:
             select(Pago).where(Pago.pedido_id == pedido_id)
         ).first()
         if not pago:
-            raise HTTPException(
-                status_code=404,
-                detail="No hay pago registrado para este pedido. "
+            raise NotFoundError("No hay pago registrado para este pedido. "
                        "Primero hay que iniciar el pago desde MercadoPago."
             )
 
         if not self._sdk:
-            raise HTTPException(
-                status_code=503,
-                detail="SDK de MercadoPago no disponible. "
+            raise ServiceUnavailableError("SDK de MercadoPago no disponible. "
                        "Verificá que MP_ACCESS_TOKEN esté configurado en el .env."
             )
 
@@ -348,9 +416,7 @@ class PagoService:
                 payment_info = mp_resp["response"]
             else:
                 logger.warning(f"[MP] payment().get({pago.mp_payment_id}) devolvió status={mp_resp.get('status')}")
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"MercadoPago no respondió para payment_id={pago.mp_payment_id}. "
+                raise BadGatewayError(f"MercadoPago no respondió para payment_id={pago.mp_payment_id}. "
                            "El pago puede haber sido eliminado o la API de MP no está disponible."
                 )
 
@@ -377,14 +443,12 @@ class PagoService:
                 self._session.refresh(pago)
                 return PagoResponse.model_validate(pago)
         else:
-            raise HTTPException(
-                status_code=400,
-                detail="El pago no tiene external_reference. "
+            raise BadRequestError("El pago no tiene external_reference. "
                        "No se puede consultar en MercadoPago."
             )
 
         # 3. Aplicar el estado de MP al registro local
-        self._aplicar_estado_mp(payment_info)
+        await self._aplicar_estado_mp(payment_info)
 
         # 4. Refrescar y devolver
         self._session.refresh(pago)
@@ -398,11 +462,11 @@ class PagoService:
             select(Pago).where(Pago.pedido_id == pedido_id)
         ).first()
         if not pago:
-            raise HTTPException(status_code=404, detail="No hay pago registrado para este pedido")
+            raise NotFoundError("No hay pago registrado para este pedido")
 
         # Verificar permisos (dueño del pedido o admin)
         pedido = self._session.get(Pedido, pedido_id)
         if pedido and pedido.usuario_id != usuario_id:
-            raise HTTPException(status_code=403, detail="Sin permiso sobre este pago")
+            raise ForbiddenError("Sin permiso sobre este pago")
 
         return PagoResponse.model_validate(pago)

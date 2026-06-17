@@ -315,10 +315,12 @@ def admin_auth_headers_fixture(client: TestClient) -> dict:
 
 
 @pytest.fixture(name="user_auth_headers")
-def user_auth_headers_fixture(client: TestClient, normal_user: dict) -> dict:
+def user_auth_headers_fixture(
+    client: TestClient, normal_user: dict, normal_user_data: dict
+) -> dict:
     """Headers de autenticación de un usuario normal (depende de `normal_user`)."""
     return _get_user_auth_headers(
         client,
         normal_user["username"],
-        "TestPass123!",
+        normal_user_data["password"],
     )

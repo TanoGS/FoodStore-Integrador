@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from core.database import get_session
 from core.security import RoleChecker
-from .schemas import ProductoCreate, ProductoUpdate, ProductoPublic
+from .schemas import ProductoCreate, ProductoUpdate, ProductoPublic, ImagenProductoUpdate
 from .service import ProductoService
 
 router = APIRouter(prefix="/productos", tags=["Catálogo - Productos"])
@@ -77,6 +77,24 @@ def toggle_disponibilidad(
 ):
     """Activa o desactiva el estado activo del producto. ADMIN o GESTOR_STOCK."""
     return svc.toggle_disponibilidad(producto_id, activo)
+
+
+@router.patch(
+    "/{producto_id}/imagenes",
+    response_model=ProductoPublic,
+    dependencies=[_admin_o_stock],
+    summary="Actualizar imágenes del producto",
+)
+def actualizar_imagenes(
+    producto_id: int,
+    data: ImagenProductoUpdate,
+    svc: ProductoService = Depends(get_service),
+):
+    """
+    Reemplaza el array `imagenes_url[]` del producto (spec sección 6.3).
+    Enviar una lista vacía elimina todas las imágenes. ADMIN o GESTOR_STOCK.
+    """
+    return svc.actualizar_imagenes(producto_id, data.imagenes_url)
 
 
 @router.patch("/{producto_id}/reactivar", response_model=ProductoPublic,

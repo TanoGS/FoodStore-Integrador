@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Response, Query, HTTPException
+from fastapi import APIRouter, Depends, status, Response, Query, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session
 from typing import List, Optional
@@ -36,12 +36,30 @@ def login(
     # { "access_token": "...", "token_type": "bearer", "email": "...", "nombre": "...", ... }
     return svc.login(form_data.username, form_data.password, response)
 
-@router.post("/logout", status_code=status.HTTP_200_OK)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
+    request: Request,
     response: Response,
-    svc: UsuarioService = Depends(get_usuario_service)
+    svc: UsuarioService = Depends(get_usuario_service),
 ):
-    return svc.logout(response)
+    raw_refresh = request.cookies.get("refresh_token")
+    svc.logout(response, raw_refresh=raw_refresh)
+
+
+@router.post("/refresh", status_code=status.HTTP_200_OK)
+def refresh_token(
+    request: Request,
+    response: Response,
+    svc: UsuarioService = Depends(get_usuario_service),
+):
+    """
+    Rota el par access_token / refresh_token.
+    El refresh_token debe llegar en la cookie HttpOnly ``refresh_token``.
+    """
+    raw_refresh = request.cookies.get("refresh_token")
+    if not raw_refresh:
+        raise HTTPException(status_code=401, detail="refresh_token no encontrado en cookies.")
+    return svc.refresh_access_token(raw_refresh, response)
 
 # ==============================================================================
 # 2. PERFIL PROPIO

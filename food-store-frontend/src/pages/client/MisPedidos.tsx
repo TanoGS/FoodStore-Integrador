@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { PedidoService, type PedidoPublic } from '../../services/pedido.service';
 import { usePedidoEventos } from '../../hooks/usePedidoWebSocket';
 import type { WSEvent } from '../../store/wsStore';
+import { EmptyState } from '../../components/common/EmptyState';
+import { SkeletonPedidoRow } from '../../components/common/SkeletonCard';
 import {
   ShoppingBag, Clock, ChefHat, Truck, CheckCircle, XCircle, Package,
   CheckCircle2, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
@@ -84,8 +86,8 @@ export default function MisPedidos() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full" />
+      <div className="max-w-4xl mx-auto px-4 py-12 space-y-4">
+        {Array.from({ length: 4 }).map((_, i) => <SkeletonPedidoRow key={i} />)}
       </div>
     );
   }
@@ -131,13 +133,12 @@ export default function MisPedidos() {
       )}
 
       {pedidos.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
-          <ShoppingBag className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-slate-700">Aún no tenés pedidos</h3>
-          <Link to="/" className="mt-4 inline-block text-orange-600 font-bold hover:underline">
-            Ir al menú
-          </Link>
-        </div>
+        <EmptyState
+          icon={<ShoppingBag className="w-8 h-8 text-slate-400" />}
+          title="Tusé no tenés pedidos"
+          description="Cuando realices un pedido aparecerá aquí."
+          action={<Link to="/" className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 py-2 rounded-xl transition-colors">Ir al menú</Link>}
+        />
       ) : (
         <>
           <div className="space-y-4">

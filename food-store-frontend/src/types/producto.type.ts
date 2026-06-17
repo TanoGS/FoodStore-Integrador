@@ -26,6 +26,7 @@ export interface Producto {
   /** Alias para `stock_cantidad` para compatibilidad con componentes que usan `stock_disponible`. */
   stock_disponible?: number;
   imagen_url?: string | null;
+  imagenes_url?: string[] | null;
   categorias?: Categoria[];
   activo?: boolean;
   receta_detallada?: RecetaItem[];

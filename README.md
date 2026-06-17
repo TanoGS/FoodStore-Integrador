@@ -9,7 +9,7 @@ Link video Primer Parcial: https://youtu.be/qEJGTZU9tY8
 
 Link videos Segundo Parcial: https://youtu.be/s0FPryARwXo - https://youtu.be/UQ1JCPWzejY
 
-Link video entrega Final: https://www.youtube.com/watch?v=LYIzaUC4-Tw
+Link video entrega Final: https://www.youtube.com/watch?v=9lfo6rXOykc
 
 ---
 

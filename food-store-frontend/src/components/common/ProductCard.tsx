@@ -19,7 +19,7 @@ export default function ProductCard({ producto }: ProductCardProps) {
       {/* Contenedor de la Imagen */}
       <div className="relative h-52 w-full overflow-hidden bg-gray-100">
         <img 
-          src={producto.imagen_url || imagenPorDefecto} 
+          src={producto.imagenes_url?.[0] ?? producto.imagen_url ?? imagenPorDefecto}
           alt={producto.nombre}
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"

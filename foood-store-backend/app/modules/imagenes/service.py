@@ -1,12 +1,12 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from sqlmodel import Session, select
 from typing import Optional
-from fastapi import UploadFile
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 
 from core.config import settings
+from core.exceptions import ServiceUnavailableError
 from .unit_of_work import ImagenUnitOfWork
 from .models import Imagen
 from .schemas import ImagenPublic, ImagenList
@@ -268,3 +268,29 @@ class ImagenService:
 
             # 3) Soft-delete en BD
             uow.imagenes.soft_delete(img)
+
+    # ------------------------------------------------------------------
+    def eliminar_imagen_por_public_id(self, public_id: str) -> None:
+        """
+        Elimina una imagen de Cloudinary por su public_id (spec sección 5.5).
+        También elimina el registro en BD si existe.
+        """
+        import cloudinary.uploader
+
+        # 1) Eliminar de Cloudinary
+        try:
+            result = cloudinary.uploader.destroy(public_id, invalidate=True)
+            if result.get("result") not in ("ok", "not found"):
+                raise ServiceUnavailableError(
+                    f"Cloudinary devolvió un error al eliminar '{public_id}': {result}"
+                )
+        except ServiceUnavailableError:
+            raise
+        except Exception as e:
+            raise ServiceUnavailableError(f"Error al conectar con Cloudinary: {e}")
+
+        # 2) Limpiar registro en BD si existe (best-effort, no falla si no está)
+        with ImagenUnitOfWork(self.session) as uow:
+            img = uow.imagenes.get_by_public_id(public_id)
+            if img and img.eliminado_en is None:
+                uow.imagenes.soft_delete(img)

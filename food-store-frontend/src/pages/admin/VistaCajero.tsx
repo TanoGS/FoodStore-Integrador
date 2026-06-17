@@ -164,24 +164,26 @@ export default function VistaCajero() {
     try {
       await PedidoService.actualizarEstado(pedidoId, 'CONFIRMADO');
       setToast({ tipo: 'ok', msg: `Pedido #${pedidoId} confirmado. Se envía a cocina.` });
+      await cargarPedidos();
     } catch {
       setToast({ tipo: 'err', msg: `Error al confirmar pedido #${pedidoId}` });
     } finally {
       setProcesando(prev => { const s = new Set(prev); s.delete(pedidoId); return s; });
     }
-  }, []);
+  }, [cargarPedidos]);
 
   const cancelarPedido = useCallback(async (pedidoId: number, motivo: string) => {
     setProcesando(prev => new Set(prev).add(pedidoId));
     try {
       await PedidoService.actualizarEstado(pedidoId, 'CANCELADO', motivo);
       setToast({ tipo: 'ok', msg: `Pedido #${pedidoId} cancelado.` });
+      await cargarPedidos();
     } catch {
       setToast({ tipo: 'err', msg: `Error al cancelar pedido #${pedidoId}` });
     } finally {
       setProcesando(prev => { const s = new Set(prev); s.delete(pedidoId); return s; });
     }
-  }, []);
+  }, [cargarPedidos]);
 
   /** Consulta MercadoPago para verificar si el pago fue aprobado. */
   const verificarMP = useCallback(async (pedidoId: number) => {
@@ -190,7 +192,12 @@ export default function VistaCajero() {
       const pago = await PagosService.sincronizar(pedidoId);
       if (pago.mp_status === 'approved') {
         setLocalPagoStatus(prev => ({ ...prev, [pedidoId]: 'approved' }));
-        setToast({ tipo: 'ok', msg: `✅ Pago #${pedidoId} APROBADO en MercadoPago. El pedido avanza a cocina automáticamente.` });
+        const pedido = pedidos.find((p) => p.id === pedidoId);
+        const esDelivery = pedido?.tipo_entrega === 'DELIVERY';
+        const msgAprobado = esDelivery
+          ? `✅ Pago #${pedidoId} APROBADO. El pedido avanza a cocina automáticamente.`
+          : `✅ Pago #${pedidoId} APROBADO. Hacé clic en "Confirmar" para enviarlo a cocina.`;
+        setToast({ tipo: 'ok', msg: msgAprobado });
       } else if (pago.mp_status === 'not_found') {
         setLocalPagoStatus(prev => ({ ...prev, [pedidoId]: 'not_found' }));
         setToast({ tipo: 'err', msg: `⚠️ Pedido #${pedidoId}: MercadoPago no tiene registro del pago. ¿El cliente cerró la página antes de pagar?` });
@@ -207,7 +214,7 @@ export default function VistaCajero() {
     } finally {
       setSincronizando(prev => { const s = new Set(prev); s.delete(pedidoId); return s; });
     }
-  }, [cargarPedidos]);
+  }, [cargarPedidos, pedidos]);
 
   // ── Datos separados ──────────────────────────────────────────────
   // Solo MP que NO fue aprobado localmente (los approved se mueven a pendientesEfectivo).

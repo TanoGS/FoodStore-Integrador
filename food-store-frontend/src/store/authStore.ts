@@ -3,30 +3,20 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { useCartStore } from './cartStore';
 import { wsService } from '../services/websocket.service';
 
-// Estructura de rol tal como la devuelve el backend (UsuarioPublic > RolPublic)
-export interface RolPublic {
-  codigo: string;  // 'ADMIN' | 'GESTOR_STOCK' | 'GESTOR_PEDIDOS' | 'CLIENTE'
-  nombre: string;
-  descripcion?: string;
-}
+// Re-export para no romper imports existentes
+export type { Rol, Usuario } from '../types/auth.type';
+import type { Usuario } from '../types/auth.type';
 
-export interface User {
-  id: number;
-  email: string;
-  nombre: string;
-  apellido?: string;
-  cel?: string;
-  activo?: boolean;
-  roles?: RolPublic[];
-}
+// User del store = Usuario del backend (alias para claridad)
+export type User = Usuario;
 
 interface AuthState {
+  user:  User | null;
   token: string | null;
-  user: User | null;
   isAuthenticated: boolean;
-  
+
   // Acciones
-  setLogin:   (token: string, user: User) => void;
+  setLogin:   (user: User, token: string) => void;
   logout:     () => void;
   updateUser: (user: User) => void;
 }
@@ -34,11 +24,11 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      token: null,
       user: null,
+      token: null,
       isAuthenticated: false,
 
-      setLogin: (token, user) => {
+      setLogin: (user, token) => {
         // Restaura el carrito guardado de este usuario, si existe
         const saved = localStorage.getItem(`food-store-cart-${user.id}`);
         if (saved) {
@@ -47,12 +37,12 @@ export const useAuthStore = create<AuthState>()(
         } else {
           useCartStore.getState().clearCart();
         }
-        set({ token, user, isAuthenticated: true });
+        set({ user, token, isAuthenticated: true });
 
-        // Abre (o reclama liderazgo para) la conexión WebSocket de pedidos.
+        // Abre la conexión WebSocket de pedidos con el token JWT.
+        // El token también se persiste en sessionStorage para poder
+        // reabrir el WS tras un F5 (onRehydrateStorage).
         wsService.connect(token);
-        // Si el servidor rechaza el token en algún momento, el WS nos avisa
-        // y forzamos un logout limpio.
         wsService.onAuthError(() => {
           console.warn('[auth] WS reportó token inválido; cerrando sesión');
           useAuthStore.getState().logout();
@@ -61,35 +51,29 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         const { user } = useAuthStore.getState();
         if (user) {
-          // Persiste el carrito actual bajo la key del usuario
           const items = useCartStore.getState().items;
           localStorage.setItem(`food-store-cart-${user.id}`, JSON.stringify(items));
         }
         useCartStore.getState().clearCart();
-
-        // Cierra la conexión WS y libera el liderazgo
         wsService.disconnect();
-
-        set({ token: null, user: null, isAuthenticated: false });
+        set({ user: null, token: null, isAuthenticated: false });
       },
       updateUser: (user) => set({ user }),
     }),
     {
       name: 'food-store-auth',
-      // sessionStorage en vez de localStorage → cada pestaña del
-      // browser tiene su propio estado de auth. Permite tener N
-      // pestañas con N usuarios distintos (o repetidos) sin que
-      // se pisen entre sí. Persiste entre refreshes de la misma
-      // tab, se pierde al cerrar la tab (intencional para multi-user).
       storage: createJSONStorage(() => sessionStorage),
+      // Persistimos token + user + isAuthenticated para poder reabrir
+      // el WebSocket tras un F5 sin necesidad de un nuevo login.
+      // sessionStorage muere al cerrar la tab (más seguro que localStorage).
+      partialize: (state) => ({
+        user:             state.user,
+        token:            state.token,
+        isAuthenticated:   state.isAuthenticated,
+      }),
 
-      // Al rehidratar el estado (p. ej. F5), si había una sesión
-      // persistida, el store queda con token + isAuthenticated=true,
-      // pero la conexión WebSocket NO se reabre sola (porque
-      // setLogin solo corre en el login real). Sin este callback,
-      // después de un refresh las vistas (cajero, cocina, MisPedidos,
-      // etc.) se montan y se suscriben a un WS que está cerrado,
-      // y por lo tanto nunca reciben los eventos en tiempo real.
+      // Al rehidratar (p. ej. F5), si había sesión persistida,
+      // reabrimos el WebSocket con el token guardado en sessionStorage.
       onRehydrateStorage: () => (state) => {
         if (state?.token && state?.isAuthenticated) {
           // eslint-disable-next-line no-console

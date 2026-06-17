@@ -36,7 +36,7 @@ class TestCreateProducto:
         response = client.post("/productos/", json=producto_payload)
         assert response.status_code == 401
 
-    @pytest.mark.parametrize("payload,id", [
+    @pytest.mark.parametrize("payload,case_id", [
         pytest.param({"precio": 50.0, "stock": 5}, "sin-nombre", id="sin-nombre"),
         pytest.param({"nombre": "X", "stock": 5}, "sin-precio", id="sin-precio"),
         pytest.param({"nombre": "X", "precio": -1.0, "stock": 5}, "precio-negativo", id="precio-negativo"),
@@ -44,7 +44,7 @@ class TestCreateProducto:
         pytest.param({"nombre": "", "precio": 10, "stock": 0}, "nombre-vacio", id="nombre-vacio"),
     ])
     def test_create_invalid_input_returns_422(
-        self, client: TestClient, admin_auth_headers: dict, payload: dict, id: str
+        self, client: TestClient, admin_auth_headers: dict, payload: dict, case_id: str
     ):
         """Datos inválidos → 422."""
         response = client.post("/productos/", json=payload, headers=admin_auth_headers)
@@ -127,6 +127,7 @@ class TestListProductos:
         response = client.get("/productos/?min_precio=10&max_precio=100")
         assert response.status_code == 200
         items = response.json()["items"]
+        assert len(items) >= 1
         for p in items:
             assert 10 <= p["precio"] <= 100
 

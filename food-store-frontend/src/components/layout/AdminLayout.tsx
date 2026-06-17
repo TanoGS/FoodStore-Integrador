@@ -2,11 +2,45 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Package, Tags, Carrot, LogOut, LayoutDashboard, Users, 
-  ClipboardList, ChefHat, Banknote, ChevronLeft, ChevronRight,
+  ClipboardList, ChefHat, Banknote, ChevronLeft, ChevronRight, Wifi, WifiOff,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useWSStore } from '../../store/wsStore';
 
 const SIDEBAR_KEY = 'admin-sidebar-collapsed';
+
+// Badge de estado de conexión WebSocket para el sidebar del admin
+const WSStatusBadge = ({ collapsed }: { collapsed: boolean }) => {
+  const estado = useWSStore((s) => s.estado);
+
+  const cfg = {
+    open:         { dot: 'bg-green-400',  label: 'Tiempo real',     icon: Wifi },
+    connecting:   { dot: 'bg-yellow-400 animate-pulse', label: 'Conectando…', icon: Wifi },
+    reconnecting: { dot: 'bg-yellow-400 animate-pulse', label: 'Reconectando…', icon: Wifi },
+    closed:       { dot: 'bg-slate-500',  label: 'Sin tiempo real', icon: WifiOff },
+    error:        { dot: 'bg-red-500',    label: 'Sin tiempo real', icon: WifiOff },
+    idle:         { dot: 'bg-slate-500',  label: 'Sin tiempo real', icon: WifiOff },
+  } as const;
+
+  const c = cfg[estado as keyof typeof cfg] ?? cfg.idle;
+  const Icon = c.icon;
+
+  if (collapsed) {
+    return (
+      <div className="flex justify-center mb-1" title={c.label}>
+        <span className={`w-2 h-2 rounded-full ${c.dot}`} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-1 mb-1">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
+      <Icon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+      <span className="text-[11px] text-slate-400 truncate">{c.label}</span>
+    </div>
+  );
+};
 
 export default function AdminLayout() {
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -193,6 +227,8 @@ export default function AdminLayout() {
           border-t border-slate-800 bg-slate-900/50 flex flex-col gap-2
           ${collapsed ? 'p-3 items-center' : 'p-4'}
         `}>
+          {/* Badge de estado WebSocket */}
+          <WSStatusBadge collapsed={collapsed} />
           {/* Info de usuario y logout */}
           <div className={`flex items-center gap-2 ${collapsed ? 'flex-col' : ''}`}>
             {!collapsed && (

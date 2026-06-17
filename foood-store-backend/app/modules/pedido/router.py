@@ -4,14 +4,6 @@ from typing import List, Optional
 
 from core.database import get_session
 from core.security import RoleChecker, TokenData, get_current_user_token
-from .events import (
-    ROOM_STAFF_PEDIDOS,
-    room_user,
-    serialize_pedido_creado,
-    serialize_pedido_estado_cambiado,
-    serialize_pedido_mio_actualizado,
-    serialize_stock_alerta,
-)
 from .schemas import (
     AvanzarEstadoRequest,
     CancelarPedidoRequest,
@@ -23,7 +15,6 @@ from .schemas import (
     PedidoAdminList,
 )
 from .service import PedidoService
-from .ws_manager import ws_manager
 
 router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
 
@@ -58,27 +49,7 @@ async def crear_pedido(
     - `pedido.creado`           → sala `staff:pedidos`
     - `pedido.mio.actualizado`  → sala `user:{usuario_id}` del cliente
     """
-    resultado = svc.crear_pedido(int(current_user.id), datos)
-
-    # Broadcast a la sala de staff
-    await ws_manager.broadcast(
-        ROOM_STAFF_PEDIDOS,
-        serialize_pedido_creado(resultado.pedido),
-    )
-    # Broadcast al cliente dueño del pedido
-    await ws_manager.broadcast(
-        room_user(resultado.pedido.usuario_id),
-        serialize_pedido_mio_actualizado(
-            id_=resultado.pedido.id,
-            estado_codigo=resultado.pedido.estado_codigo,
-            actualizado_en=(
-                resultado.pedido.actualizado_en.isoformat()
-                if resultado.pedido.actualizado_en
-                else resultado.pedido.creado_en.isoformat()
-            ),
-        ),
-    )
-
+    resultado = await svc.crear_pedido(int(current_user.id), datos)
     return resultado.pedido
 
 
@@ -230,36 +201,9 @@ async def cancelar_pedido(
     - `pedido.mio.actualizado`   → sala `user:{usuario_id}` del cliente
     """
     actor_id = int(current_user.id)
-    resultado = svc.cancelar_pedido(
+    resultado = await svc.cancelar_pedido(
         pedido_id, datos.motivo, actor_id, current_user.roles,
     )
-
-    # Broadcast a la sala de staff (payload completo con historial)
-    await ws_manager.broadcast(
-        ROOM_STAFF_PEDIDOS,
-        serialize_pedido_estado_cambiado(
-            pedido=resultado.pedido,
-            estado_desde=resultado.historial.estado_desde,
-            estado_hacia=resultado.historial.estado_hacia,
-            usuario_actor_id=resultado.historial.usuario_id,
-            motivo=resultado.historial.motivo,
-            historial=resultado.historial,
-        ),
-    )
-    # Broadcast al cliente dueño del pedido (payload mínimo)
-    await ws_manager.broadcast(
-        room_user(resultado.pedido.usuario_id),
-        serialize_pedido_mio_actualizado(
-            id_=resultado.pedido.id,
-            estado_codigo=resultado.pedido.estado_codigo,
-            actualizado_en=(
-                resultado.pedido.actualizado_en.isoformat()
-                if resultado.pedido.actualizado_en
-                else None
-            ),
-        ),
-    )
-
     return resultado.pedido
 
 
@@ -286,39 +230,5 @@ async def avanzar_estado(
     - `stock.alerta`             → sala `staff:pedidos` (si algún ingrediente quedó bajo stock de seguridad)
     """
     actor_id = int(current_user.id)
-    resultado = svc.avanzar_estado(pedido_id, datos, actor_id)
-
-    # Broadcast a la sala de staff (payload completo con historial)
-    await ws_manager.broadcast(
-        ROOM_STAFF_PEDIDOS,
-        serialize_pedido_estado_cambiado(
-            pedido=resultado.pedido,
-            estado_desde=resultado.historial.estado_desde,
-            estado_hacia=resultado.historial.estado_hacia,
-            usuario_actor_id=resultado.historial.usuario_id,
-            motivo=resultado.historial.motivo,
-            historial=resultado.historial,
-        ),
-    )
-    # Broadcast al cliente dueño del pedido (payload mínimo)
-    await ws_manager.broadcast(
-        room_user(resultado.pedido.usuario_id),
-        serialize_pedido_mio_actualizado(
-            id_=resultado.pedido.id,
-            estado_codigo=resultado.pedido.estado_codigo,
-            actualizado_en=(
-                resultado.pedido.actualizado_en.isoformat()
-                if resultado.pedido.actualizado_en
-                else None
-            ),
-        ),
-    )
-
-    # ── Alerta de stock bajo (stock ya persisted tras commit del UoW) ──
-    if resultado.stock_bajo:
-        await ws_manager.broadcast(
-            ROOM_STAFF_PEDIDOS,
-            serialize_stock_alerta(resultado.stock_bajo),
-        )
-
+    resultado = await svc.avanzar_estado(pedido_id, datos, actor_id)
     return resultado.pedido

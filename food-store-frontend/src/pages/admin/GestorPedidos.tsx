@@ -1,6 +1,9 @@
-import { useState, useEffect, useCallback, useRef, type ElementType, Fragment } from 'react';
+import { useState, useCallback, useRef, type ElementType, Fragment } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
+import { EmptyState } from '../../components/common/EmptyState';
+import { SkeletonAdminRow } from '../../components/common/SkeletonCard';
 import {
   PedidoService,
   ESTADOS_FSM,
@@ -82,89 +85,81 @@ type Feedback =
 
 export default function GestorPedidos() {
   const { user, isAuthenticated } = useAuthStore();
-  const [pedidos,    setPedidos]    = useState<PedidoAdmin[]>([]);
-  const [loading,    setLoading]    = useState(true);
+  const queryClient = useQueryClient();
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [feedback,   setFeedback]   = useState<Feedback>(null);
   const [motivoCtx,   setMotivoCtx]  = useState<{ id: number; estado: string } | null>(null);
 
-  // Filtro de período: 'TODOS' | 'DIARIO' | 'MENSUAL'
   const [periodo, setPeriodo] = useState<'TODOS' | 'DIARIO' | 'MENSUAL'>('TODOS');
 
-  // ─── Costo de envío configurable ─────────────────────────────────
   const [costoEnvio, setCostoEnvio] = useState<number | null>(null);
   const [editandoCosto, setEditandoCosto] = useState(false);
   const [costoEnvioInput, setCostoEnvioInput] = useState('');
-  const [savingCosto, setSavingCosto] = useState(false);
 
-  // Trackear qué filas están expandidas para ver los productos
   const [expandidas, setExpandidas] = useState<Set<number>>(new Set());
-
-  // Ref del timer de feedback
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── RBAC ─────────────────────────────────────────────────────────
   const canManageOrders = user?.roles?.some(
     (r) => ROLES_STAFF_PEDIDOS.includes(r.codigo)
   ) ?? false;
 
-  // ─── Cargar pedidos según el período seleccionado ──────────────────
-  const cargarPedidos = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await PedidoService.listarTodosAdmin(
-        periodo === 'TODOS' ? undefined : periodo,
-      );
-      setPedidos([...data].sort((a, b) => b.id - a.id));
-    } catch (error) {
-      console.error('Error al cargar pedidos:', error);
+  // ─── useQuery: cargar pedidos ──────────────────────────────────────
+  const { data: pedidos = [], isLoading: loading } = useQuery<PedidoAdmin[]>({
+    queryKey: ['pedidos-admin', periodo],
+    queryFn: () => PedidoService.listarTodosAdmin(periodo === 'TODOS' ? undefined : periodo),
+    refetchInterval: false,
+  });
+
+  // ─── useMutation: cambio de estado ────────────────────────────────
+  const cambiarEstadoMutation = useMutation({
+    mutationFn: ({ id, nuevoEstado, motivo }: { id: number; nuevoEstado: string; motivo?: string }) =>
+      PedidoService.actualizarEstado(id, nuevoEstado, motivo),
+    onMutate: ({ id }) => setUpdatingId(id),
+    onSuccess: (_data, { id, nuevoEstado }) => {
+      queryClient.invalidateQueries({ queryKey: ['pedidos-admin'] });
       mostrarFeedback({
-        tipo: 'err',
-        msg: 'No se pudieron cargar los pedidos. Reintentá en unos segundos.',
+        tipo: 'ok',
+        msg: `Pedido #${id} → "${ESTADOS_LABELS[nuevoEstado] ?? nuevoEstado}".`,
       });
-    } finally {
-      setLoading(false);
-    }
-  }, [periodo]);
+    },
+    onError: (error: unknown, { id }) => {
+      const axiosErr = error as { response?: { status?: number; data?: { detail?: unknown } } };
+      const status = axiosErr?.response?.status;
+      const detail = axiosErr?.response?.data?.detail;
+      const esStockInsuficiente =
+        status === 409 &&
+        typeof detail === 'object' &&
+        (detail as { error?: string })?.error === 'stock_insuficiente_al_confirmar';
 
-  useEffect(() => {
-    if (canManageOrders) {
-      cargarPedidos();
-    }
-  }, [canManageOrders, cargarPedidos]);
+      let msg = 'No se pudo cambiar el estado. Verificá las reglas de transición.';
+      if (esStockInsuficiente) {
+        msg = `⚠️ El pedido #${id} no se puede confirmar: stock insuficiente.`;
+      } else if (typeof detail === 'string') {
+        msg = detail;
+      }
+      mostrarFeedback({ tipo: 'err', msg });
+    },
+    onSettled: () => setUpdatingId(null),
+  });
 
-  // Cargar costo de envío al montar
-  useEffect(() => {
-    ConfiguracionService.getCostoEnvio()
-      .then((data) => {
-        setCostoEnvio(data.costo_envio_delivery);
-        setCostoEnvioInput(String(data.costo_envio_delivery));
-      })
-      .catch(() => {});
-  }, []);
+  // ─── useMutation: guardar costo de envío ──────────────────────────
+  const guardarCostoMutation = useMutation({
+    mutationFn: (valor: number) => ConfiguracionService.setCostoEnvio(valor),
+    onSuccess: (data: { costo_envio_delivery?: number }) => {
+      setCostoEnvio(data?.costo_envio_delivery ?? null);
+      setEditandoCosto(false);
+    },
+  });
 
-  const handleGuardarCostoEnvio = async () => {
+  const handleGuardarCostoEnvio = () => {
     const valor = parseFloat(costoEnvioInput);
     if (isNaN(valor) || valor < 0) return;
-    setSavingCosto(true);
-    try {
-      const data = await ConfiguracionService.setCostoEnvio(valor);
-      setCostoEnvio(data.costo_envio_delivery);
-      setEditandoCosto(false);
-      mostrarFeedback({ tipo: 'ok', msg: `Costo de envío actualizado a $${data.costo_envio_delivery.toFixed(2)}` });
-    } catch {
-      mostrarFeedback({ tipo: 'err', msg: 'No se pudo actualizar el costo de envío.' });
-    } finally {
-      setSavingCosto(false);
-    }
+    guardarCostoMutation.mutate(valor);
   };
 
-  // Limpia el timer al desmontar
-  useEffect(() => {
-    return () => {
-      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    };
-  }, []);
+  const ejecutarCambioEstado = (id: number, nuevoEstado: string, motivo?: string) => {
+    cambiarEstadoMutation.mutate({ id, nuevoEstado, motivo });
+  };
 
   const mostrarFeedback = (f: Feedback) => {
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
@@ -177,8 +172,7 @@ export default function GestorPedidos() {
   // ─── WebSocket ────────────────────────────────────────────────────
   const handlePedidoEvent = useCallback((ev: WSEvent) => {
     if (ev.type === 'pedido.creado') {
-      // Recargar la lista al recibir un pedido nuevo
-      void cargarPedidos();
+      queryClient.invalidateQueries({ queryKey: ['pedidos-admin'] });
       const payload = ev.payload as { pedido: PedidoAdmin };
       mostrarFeedback({
         tipo: 'ok',
@@ -187,32 +181,28 @@ export default function GestorPedidos() {
     } else if (ev.type === 'pedido.estado.cambiado') {
       const payload = ev.payload as {
         pedido: PedidoAdmin;
-        estado_desde:     string | null;
         estado_hacia:     string;
         usuario_actor_id: number | null;
       };
       const myId = useAuthStore.getState().user?.id;
       if (payload.usuario_actor_id !== myId) {
-        void cargarPedidos();
-        const label = ESTADOS_LABELS[payload.estado_hacia] ?? payload.estado_hacia;
+        queryClient.invalidateQueries({ queryKey: ['pedidos-admin'] });
         mostrarFeedback({
           tipo: 'ok',
-          msg: `Pedido #${payload.pedido.id} → ${label}.`,
+          msg: `Pedido #${payload.pedido.id} → ${ESTADOS_LABELS[payload.estado_hacia] ?? payload.estado_hacia}.`,
         });
       }
     } else if (ev.type === 'stock.alerta') {
       const alerta = ev.payload as StockAlerta;
-      const pct = Math.round((alerta.stock_actual / alerta.stock_seguridad) * 100);
       mostrarFeedback({
         tipo: 'err',
-        msg: `⚠️ STOCK BAJO: "${alerta.ingrediente_nombre}" tiene ${alerta.stock_actual} ${alerta.unidad_medida} (${pct}% del mínimo de ${alerta.stock_seguridad}). Revisar pedido #${alerta.pedido_id}.`,
+        msg: `⚠️ STOCK BAJO: "${alerta.ingrediente_nombre}" tiene ${alerta.stock_actual} ${alerta.unidad_medida}.`,
       });
     }
-  }, [cargarPedidos]);
+  }, [queryClient]);
 
   usePedidoEventos(handlePedidoEvent);
 
-  // ─── Toggle de expand/collapse de productos ────────────────────────
   const toggleExpand = (id: number) => {
     setExpandidas((prev) => {
       const next = new Set(prev);
@@ -222,71 +212,20 @@ export default function GestorPedidos() {
     });
   };
 
-  // ─── Cambio de estado ──────────────────────────────────────────────
-  const handleCambiarEstado = async (
-    id: number,
-    estadoActual: string,
-    nuevoEstado: string,
-  ) => {
+  const handleCambiarEstado = (id: number, estadoActual: string, nuevoEstado: string) => {
     if (estadoActual === nuevoEstado) return;
-
     if (nuevoEstado === 'CANCELADO') {
       setMotivoCtx({ id, estado: estadoActual });
       return;
     }
-
-    await ejecutarCambioEstado(id, nuevoEstado);
+    ejecutarCambioEstado(id, nuevoEstado);
   };
 
-  const handleConfirmarMotivo = async (motivo: string) => {
+  const handleConfirmarMotivo = (motivo: string) => {
     if (!motivoCtx) return;
     const { id } = motivoCtx;
     setMotivoCtx(null);
-    await ejecutarCambioEstado(id, 'CANCELADO', motivo);
-  };
-
-  const ejecutarCambioEstado = async (
-    id: number,
-    nuevoEstado: string,
-    motivo?: string,
-  ) => {
-    try {
-      setUpdatingId(id);
-      await PedidoService.actualizarEstado(id, nuevoEstado, motivo);
-      mostrarFeedback({
-        tipo: 'ok',
-        msg: `Pedido #${id} → "${ESTADOS_LABELS[nuevoEstado] ?? nuevoEstado}".`,
-      });
-      await cargarPedidos();
-    } catch (error) {
-      console.error('Error al cambiar estado:', error);
-      const status = (error as { response?: { status?: number } })
-        ?.response?.status;
-      const detail = (error as { response?: { data?: { detail?: unknown } } })
-        ?.response?.data?.detail;
-
-      // Caso especial: stock insuficiente al confirmar (409 del backend)
-      const esStockInsuficiente =
-        status === 409 &&
-        typeof detail === 'object' &&
-        (detail as { error?: string })?.error === 'stock_insuficiente_al_confirmar';
-
-      let msg = 'No se pudo cambiar el estado. Verificá las reglas de transición.';
-
-      if (esStockInsuficiente) {
-        const d = detail as { pedido_id?: number };
-        const pid = d?.pedido_id;
-        msg = pid
-          ? `⚠️ El pedido #${pid} no se puede confirmar: el stock cambió desde que se creó. Contactá al cliente o cancelalo.`
-          : '⚠️ No se puede confirmar: el stock cambió desde que se creó. Contactá al cliente o cancelalo.';
-      } else if (typeof detail === 'string') {
-        msg = detail;
-      }
-
-      mostrarFeedback({ tipo: 'err', msg });
-    } finally {
-      setUpdatingId(null);
-    }
+    ejecutarCambioEstado(id, 'CANCELADO', motivo);
   };
 
   // ─── RBAC redirect ────────────────────────────────────────────────
@@ -331,10 +270,10 @@ export default function GestorPedidos() {
               />
               <button
                 onClick={handleGuardarCostoEnvio}
-                disabled={savingCosto}
+                disabled={guardarCostoMutation.isPending}
                 className="flex items-center gap-1 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
               >
-                {savingCosto ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {guardarCostoMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Guardar
               </button>
               <button
@@ -407,9 +346,14 @@ export default function GestorPedidos() {
 
         {/* Tabla */}
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-400" />
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => <SkeletonAdminRow key={i} />)}
           </div>
+        ) : pedidos.length === 0 ? (
+          <EmptyState
+            title="Sin pedidos"
+            description="No hay pedidos en el período seleccionado."
+          />
         ) : (
           <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
             <table className="w-full text-left border-collapse">

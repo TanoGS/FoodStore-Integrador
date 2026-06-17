@@ -1,5 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import BigInteger, Numeric, DateTime
+from sqlalchemy import BigInteger, Numeric, DateTime, Column
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Text
 from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, timezone
 
@@ -19,7 +21,11 @@ class Producto(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True, sa_type=BigInteger)
     nombre: str = Field(index=True, max_length=100)
     descripcion: Optional[str] = Field(default=None, max_length=500)
-    imagen_url: Optional[str] = Field(default=None, max_length=255)
+    # Array de URLs de imágenes en Cloudinary (spec v7: imagenes_url TEXT[])
+    imagenes_url: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(ARRAY(Text()), nullable=True),
+    )
     stock_cantidad: int = Field(default=0)
     activo: bool = Field(default=True)
     

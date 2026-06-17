@@ -14,6 +14,7 @@ interface Producto {
   nombre:           string;
   descripcion:      string | null;
   imagen_url:       string | null;
+  imagenes_url:      string[] | null;
   activo:           boolean;
   costo_produccion: number;
   margen_ganancia:  number;
@@ -201,9 +202,9 @@ export default function ProductosAdmin() {
                   <tr key={prod.id} className={`transition-colors ${rowCls}`}>
 
                     <td className="p-3">
-                      {prod.imagen_url ? (
+                      {(prod.imagenes_url?.[0] ?? prod.imagen_url) ? (
                         <img
-                          src={prod.imagen_url}
+                          src={prod.imagenes_url?.[0] ?? prod.imagen_url!}
                           alt={prod.nombre}
                           className="w-12 h-12 rounded-lg object-cover border border-slate-600"
                           referrerPolicy="no-referrer"

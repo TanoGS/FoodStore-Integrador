@@ -61,7 +61,7 @@ class OAuth2PasswordBearerWithCookie(OAuth2PasswordBearer):
         return param
 
 # Instanciamos nuestro nuevo guardia indicándole cuál es la ruta de login para Swagger
-oauth2_scheme = OAuth2PasswordBearerWithCookie(tokenUrl="/api/usuarios/login")
+oauth2_scheme = OAuth2PasswordBearerWithCookie(tokenUrl="/api/v1/usuarios/login")
 
 
 # =====================================================================

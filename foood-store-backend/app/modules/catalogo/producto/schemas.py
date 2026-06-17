@@ -41,7 +41,7 @@ class RecetaItemPublic(BaseModel):
 class ProductoBase(BaseModel):
     nombre: str = Field(..., max_length=100)
     descripcion: Optional[str] = Field(default=None, max_length=500)
-    imagen_url: Optional[str] = Field(default=None, max_length=255)
+    imagenes_url: Optional[List[str]] = Field(default=None)
     stock_cantidad: int = Field(default=0)
     activo: bool = True
     margen_ganancia: float = Field(default=90.0)
@@ -61,7 +61,7 @@ class ProductoCreate(ProductoBase):
 class ProductoUpdate(BaseModel):
     nombre: Optional[str] = Field(default=None, max_length=100)
     descripcion: Optional[str] = Field(default=None, max_length=500)
-    imagen_url: Optional[str] = Field(default=None, max_length=255)
+    imagenes_url: Optional[List[str]] = Field(default=None)
     stock_cantidad: Optional[int] = None
     activo: Optional[bool] = None
     margen_ganancia: Optional[float] = None
@@ -71,6 +71,11 @@ class ProductoUpdate(BaseModel):
     )
     categoria_ids: Optional[List[int]] = None
     receta: Optional[List[RecetaItemCreate]] = None
+
+
+class ImagenProductoUpdate(BaseModel):
+    """Schema para PATCH /productos/{id}/imagenes (spec sección 6.3)."""
+    imagenes_url: List[str]
 
 
 class ProductoPublic(ProductoBase):
@@ -105,7 +110,7 @@ class ProductoPublic(ProductoBase):
                 "id": data.id,
                 "nombre": data.nombre,
                 "descripcion": data.descripcion,
-                "imagen_url": data.imagen_url,
+                "imagenes_url": data.imagenes_url,
                 "stock_cantidad": data.stock_cantidad,
                 "activo": data.activo,
                 "margen_ganancia": data.margen_ganancia,

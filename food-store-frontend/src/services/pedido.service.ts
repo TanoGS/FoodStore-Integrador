@@ -116,6 +116,7 @@ export const ROLES_STAFF_PEDIDOS: readonly string[] = [
   'ADMIN',
   'GESTOR_PEDIDOS',
   'COCINA',
+  'CAJERO',
 ];
 
 // Helper para normalizar la respuesta (algunas rutas devuelven array

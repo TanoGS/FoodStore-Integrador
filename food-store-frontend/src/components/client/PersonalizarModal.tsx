@@ -43,7 +43,7 @@ export default function PersonalizarModal({ producto, onClose }: PersonalizarMod
       id: producto.id,
       nombre: producto.nombre,
       precio_base: producto.precio,
-      imagen_url: producto.imagen_url || null,
+      imagen_url: producto.imagenes_url?.[0] ?? producto.imagen_url ?? null,
       personalizacion: removedItems,
       subtotal: producto.precio,
     });

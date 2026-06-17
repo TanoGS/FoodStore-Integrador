@@ -94,3 +94,20 @@ def eliminar_imagen(
     svc: ImagenService = Depends(get_svc),
 ):
     svc.eliminar_imagen(imagen_id)
+
+
+@router.delete(
+    "/cloudinary/{public_id:path}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[_admin_y_stock],
+    summary="Eliminar imagen de Cloudinary por public_id",
+)
+def eliminar_imagen_por_public_id(
+    public_id: str,
+    svc: ImagenService = Depends(get_svc),
+):
+    """
+    Elimina una imagen de Cloudinary usando su `public_id` (spec sección 5.5).
+    También borra el registro en BD si existe. ADMIN o GESTOR_STOCK.
+    """
+    svc.eliminar_imagen_por_public_id(public_id)

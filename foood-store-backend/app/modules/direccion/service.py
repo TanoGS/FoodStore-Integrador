@@ -1,5 +1,5 @@
-from fastapi import HTTPException, status
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
+from core.exceptions import NotFoundError, ForbiddenError, UnauthorizedError, BadRequestError, ConflictError, UnprocessableError, ServiceUnavailableError, BadGatewayError
 from sqlmodel import Session
 
 from .unit_of_work import DireccionUnitOfWork
@@ -36,8 +36,7 @@ class DireccionService:
         with DireccionUnitOfWork(self.session) as uow:
             d = uow.direcciones.get_by_id(direccion_id, usuario_id)
             if not d:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail="Dirección no encontrada.")
+                raise NotFoundError("Dirección no encontrada.")
             return DireccionPublic.model_validate(d)
 
     # ------------------------------------------------------------------
@@ -47,8 +46,7 @@ class DireccionService:
         with DireccionUnitOfWork(self.session) as uow:
             d = uow.direcciones.get_by_id(direccion_id, usuario_id)
             if not d:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail="Dirección no encontrada.")
+                raise NotFoundError("Dirección no encontrada.")
             update_data = datos.model_dump(exclude_unset=True)
             if update_data.get("predeterminada"):
                 uow.direcciones.quitar_predeterminadas(usuario_id)
@@ -63,8 +61,7 @@ class DireccionService:
         with DireccionUnitOfWork(self.session) as uow:
             d = uow.direcciones.get_by_id(direccion_id, usuario_id)
             if not d:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail="Dirección no encontrada.")
+                raise NotFoundError("Dirección no encontrada.")
             uow.direcciones.quitar_predeterminadas(usuario_id)
             d.predeterminada = True
             d.actualizado_en = datetime.now(timezone.utc)
@@ -76,13 +73,11 @@ class DireccionService:
         with DireccionUnitOfWork(self.session) as uow:
             d = uow.direcciones.get_by_id(direccion_id, usuario_id)
             if not d:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail="Dirección no encontrada.")
+                raise NotFoundError("Dirección no encontrada.")
             if d.predeterminada:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="No podés eliminar la dirección principal. "
-                           "Establecé otra dirección como principal antes de eliminar esta."
+                raise ConflictError(
+                    "No podés eliminar la dirección principal. "
+                    "Establecé otra dirección como principal antes de eliminar esta."
                 )
             d.eliminado_en = datetime.now(timezone.utc)
             d.actualizado_en = datetime.now(timezone.utc)
@@ -93,8 +88,7 @@ class DireccionService:
         with DireccionUnitOfWork(self.session) as uow:
             d = uow.direcciones.get_eliminado_by_id(direccion_id, usuario_id)
             if not d:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail="Dirección no encontrada o no está eliminada.")
+                raise NotFoundError("Dirección no encontrada o no está eliminada.")
             d.eliminado_en = None
             d.actualizado_en = datetime.now(timezone.utc)
             result = uow.direcciones.add(d)

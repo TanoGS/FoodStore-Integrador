@@ -56,7 +56,7 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                   {/* Foto del producto */}
                   <div className="w-20 h-20 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden">
                     <img
-                      src={item.producto.imagen_url || "https://via.placeholder.com/150"}
+                      src={item.producto.imagenes_url?.[0] ?? item.producto.imagen_url ?? "https://via.placeholder.com/150"}
                       alt={item.producto.nombre}
                       className="w-full h-full object-cover"
                     />

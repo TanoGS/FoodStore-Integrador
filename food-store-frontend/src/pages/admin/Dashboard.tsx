@@ -16,7 +16,7 @@ const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#c2410c'
 
 const KpiCard = ({
   icon: Icon, label, value, sub, color,
-}: { icon: any; label: string; value: string; sub?: string; color: string }) => (
+}: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; sub?: string; color: string }) => (
   <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 shadow-lg">
     <div className="flex items-center justify-between mb-3">
       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</span>

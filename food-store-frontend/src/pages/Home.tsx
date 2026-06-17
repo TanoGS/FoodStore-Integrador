@@ -94,7 +94,7 @@ export default function Home() {
 
                       <div className="relative h-48 bg-slate-100 overflow-hidden">
                         <img
-                          src={producto.imagen_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80'}
+                          src={producto.imagenes_url?.[0] ?? producto.imagen_url ?? 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80'}
                           alt={producto.nombre}
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                           onError={(e) => {

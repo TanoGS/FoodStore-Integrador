@@ -1,6 +1,6 @@
-from fastapi import HTTPException, status
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from typing import Optional
+from core.exceptions import NotFoundError, ForbiddenError, UnauthorizedError, BadRequestError, ConflictError, UnprocessableError, ServiceUnavailableError, BadGatewayError
 from sqlmodel import Session
 
 from .unit_of_work import ProductoUnitOfWork
@@ -25,9 +25,7 @@ class ProductoService:
             for cat_id in data.categoria_ids:
                 cat = uow.categorias.get_by_id(cat_id)
                 if not cat:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Categoría {cat_id} no encontrada",
+                    raise NotFoundError(f"Categoría {cat_id} no encontrada",
                     )
                 producto.categorias.append(cat)
 
@@ -36,9 +34,7 @@ class ProductoService:
             for item in data.receta:
                 ing = uow.ingredientes.get_activo(item.ingrediente_id)
                 if not ing:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Ingrediente {item.ingrediente_id} no encontrado",
+                    raise NotFoundError(f"Ingrediente {item.ingrediente_id} no encontrado",
                     )
                 costo_total += item.cantidad_requerida * float(ing.costo_unitario)
                 enlace = ProductoIngrediente(
@@ -58,9 +54,7 @@ class ProductoService:
 
             # RN: el precio final debe ser mayor a 0
             if producto.precio <= 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="El precio del producto no puede ser 0. Ingresá un precio manual o configurá la receta y el margen.",
+                raise BadRequestError("El precio del producto no puede ser 0. Ingresá un precio manual o configurá la receta y el margen.",
                 )
 
             self._session.add(producto)
@@ -99,9 +93,7 @@ class ProductoService:
         with uow:
             producto = uow.productos.get_activo(producto_id)
         if not producto:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Producto no encontrado",
+            raise NotFoundError("Producto no encontrado",
             )
         return ProductoPublic.model_validate(producto)
 
@@ -113,9 +105,7 @@ class ProductoService:
         with uow:
             producto = uow.productos.get_activo(producto_id)
             if not producto:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Producto no encontrado",
+                raise NotFoundError("Producto no encontrado",
                 )
 
             update_data = data.model_dump(exclude_unset=True)
@@ -126,9 +116,7 @@ class ProductoService:
                 for cat_id in data.categoria_ids:
                     cat = uow.categorias.get_by_id(cat_id)
                     if not cat:
-                        raise HTTPException(
-                            status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Categoría {cat_id} no encontrada",
+                        raise NotFoundError(f"Categoría {cat_id} no encontrada",
                         )
                     producto.categorias.append(cat)
 
@@ -143,9 +131,7 @@ class ProductoService:
                 for item in data.receta:
                     ing = uow.ingredientes.get_activo(item.ingrediente_id)
                     if not ing:
-                        raise HTTPException(
-                            status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Ingrediente {item.ingrediente_id} no encontrado",
+                        raise NotFoundError(f"Ingrediente {item.ingrediente_id} no encontrado",
                         )
                     costo_total += item.cantidad_requerida * float(ing.costo_unitario)
                     enlace = ProductoIngrediente(
@@ -194,9 +180,7 @@ class ProductoService:
         with uow:
             producto = uow.productos.get_activo(producto_id)
             if not producto:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Producto no encontrado",
+                raise NotFoundError("Producto no encontrado",
                 )
             producto.activo = activo
             producto.actualizado_en = datetime.now(timezone.utc)
@@ -211,9 +195,7 @@ class ProductoService:
         with uow:
             producto = uow.productos.get_activo(producto_id)
             if not producto:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Producto no encontrado",
+                raise NotFoundError("Producto no encontrado",
                 )
             producto.eliminado_en = datetime.now(timezone.utc)
             self._session.add(producto)
@@ -225,14 +207,30 @@ class ProductoService:
         with uow:
             producto = uow.productos.get_by_id(producto_id)
             if not producto:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Producto no encontrado",
+                raise NotFoundError("Producto no encontrado",
                 )
             producto.eliminado_en = None
             producto.actualizado_en = datetime.now(timezone.utc)
             self._session.add(producto)
             self._session.flush()
             result = uow.productos.get_by_id(producto.id)
+        return ProductoPublic.model_validate(result)
+
+    # ------------------------------------------------------------------
+    def actualizar_imagenes(self, producto_id: int, imagenes_url: list[str]) -> ProductoPublic:
+        """
+        Reemplaza el array imagenes_url[] del producto (spec sección 6.3 / 5.2).
+        Enviar una lista vacía elimina todas las imágenes.
+        """
+        uow = ProductoUnitOfWork(self._session)
+        with uow:
+            producto = uow.productos.get_activo(producto_id)
+            if not producto:
+                raise NotFoundError("Producto no encontrado")
+            producto.imagenes_url = imagenes_url
+            producto.actualizado_en = datetime.now(timezone.utc)
+            self._session.add(producto)
+            self._session.flush()
+            result = uow.productos.get_activo(producto.id)
         return ProductoPublic.model_validate(result)
 
