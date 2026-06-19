@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status, UploadFile
-from sqlmodel import Session, select
+from sqlmodel import Session
 from typing import Optional
 import cloudinary
 import cloudinary.uploader
@@ -187,9 +187,7 @@ class ImagenService:
         total_en_db = 0
 
         with ImagenUnitOfWork(self.session) as uow:
-            all_db_imgs = uow.imagenes.session.exec(
-                select(Imagen)
-            ).all()
+            all_db_imgs = uow.imagenes.get_todas(offset=0, limit=10_000, incluir_eliminadas=True)
             db_public_ids: dict = {img.public_id: img for img in all_db_imgs}
             total_en_db = len(db_public_ids)
 

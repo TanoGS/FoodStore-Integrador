@@ -18,6 +18,12 @@ class DireccionRepository(BaseRepository[DireccionEntrega]):
             )
         ).first()
 
+    def get_sin_restriccion(self, direccion_id: int) -> Optional[DireccionEntrega]:
+        """Busca una dirección solo por ID, sin filtrar por usuario (uso administrativo)."""
+        return self.session.exec(
+            select(DireccionEntrega).where(DireccionEntrega.id == direccion_id)
+        ).first()
+
     def get_by_usuario(self, usuario_id: int) -> List[DireccionEntrega]:
         """Trae todas las direcciones activas de un usuario."""
         return list(self.session.exec(

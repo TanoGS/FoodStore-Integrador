@@ -1,11 +1,12 @@
 ## INFORME
-#  TPI Programación IV — UTN
+
+# TPI Programación IV — UTN
 
 **Integrantes:** Renzo Sosa, Sponton Giani
 
 ---
 
-##  TABLA DE CONTENIDOS
+## TABLA DE CONTENIDOS
 
 1. [Resumen Ejecutivo](#1-resumen-ejecutivo)
 2. [Stack Tecnológico](#2-stack-tecnológico)
@@ -45,40 +46,53 @@
 | **SQLModel** | 0.0.38 | ORM híbrido (SQLAlchemy + Pydantic) |
 | **PostgreSQL** | 15+ | Base de datos relacional |
 | **Alembic** | 1.18.4 | Migraciones de base de datos |
-| **PyJWT** | (últimas) | Generación y validación de JWT |
-| **python-cloudinary** | (últimas) | Cliente de Cloudinary |
+| **python-jose** | 3.5.0 | Generación y validación de JWT |
+| **bcrypt** | 4.0.1 | Hashing de contraseñas |
+| **passlib** | 1.7.4 | Gestión de contraseñas |
+| **python-multipart** | 0.0.27 | Soporte para formularios multipart |
+| **pydantic** | 2.13.0 | Validación de datos |
+| **pydantic-settings** | 2.13.1 | Configuración con variables de entorno |
+| **python-dotenv** | 1.2.2 | Gestión de variables de entorno |
+| **uvicorn** | 0.44.0 | Servidor ASGI |
 | **mercadopago** | 2.3.0 | SDK de MercadoPago |
-| **python-dotenv** | (últimas) | Gestión de variables de entorno |
-| **uvicorn** | (últimas) | Servidor ASGI |
-| **pytest** | (últimas) | Framework de testing |
+| **cloudinary** | 1.36.0 | Cliente de Cloudinary |
+| **websockets** | 13.0 | Soporte WebSocket |
+| **psycopg2-binary** | 2.9.11 | Driver PostgreSQL |
+| **psycopg2** | 2.9.12 | Driver PostgreSQL |
+| **SQLAlchemy** | 2.0.49 | ORM base |
+| **pytest** | 8.3.4 | Framework de testing |
+| **pytest-asyncio** | 0.24.0 | Testing asincrónico |
+| **pytest-cov** | 5.0.0 | Cobertura de tests |
+| **pytest-dotenv** | 0.5.2 | Variables de entorno en tests |
+| **httpx** | 0.28.1 | Cliente HTTP para tests |
 
 ### 2.2 Frontend
 
 | Componente | Versión | Propósito |
 |-----------|---------|----------|
 | **React** | 19.2.4 | Librería UI y gestión de componentes |
-| **TypeScript** | 6.0.2 | Tipado estático para JavaScript |
-| **Vite** | 8.0.4 | Build tool y dev server |
-| **React Router DOM** | 7.14.1 | Enrutamiento en SPA |
-| **Tailwind CSS** | 4.2.2 | Framework CSS utility-first |
-| **TanStack Query** | 5.99.0 | Gestión de estado asincrónico (servidor) |
-| **TanStack Form** | 1.29.0 | Gestión avanzada de formularios |
-| **Zustand** | 5.0.12 | Gestión de estado global ligera |
-| **Axios** | 1.15.0 | Cliente HTTP |
-| **Recharts** | 3.8.1 | Librería de gráficos |
-| **Lucide React** | 1.11.0 | Iconografía SVG |
-| **@mercadopago/sdk-react** | (últimas) | SDK de MercadoPago para React |
+| **TypeScript** | ~6.0.2 | Tipado estático para JavaScript |
+| **Vite** | ^8.0.4 | Build tool y dev server |
+| **React Router DOM** | ^7.14.1 | Enrutamiento en SPA |
+| **Tailwind CSS** | ^4.2.2 | Framework CSS utility-first |
+| **@tanstack/react-query** | ^5.99.0 | Gestión de estado asincrónico (servidor) |
+| **@tanstack/react-form** | ^1.29.0 | Gestión avanzada de formularios |
+| **Zustand** | ^5.0.12 | Gestión de estado global ligera |
+| **Axios** | ^1.15.0 | Cliente HTTP |
+| **Recharts** | ^3.8.1 | Librería de gráficos |
+| **Lucide React** | ^1.11.0 | Iconografía SVG |
+| **@mercadopago/sdk-react** | ^1.0.7 | SDK de MercadoPago para React |
 
 ### 2.3 Herramientas DevOps y Testing
 
 | Herramienta | Propósito |
 |-----------|----------|
 | **Alembic** | Control de versiones de esquema BD |
-| **Docker** | Containerización (opcional) |
 | **pytest** | Testing unitario e integración |
 | **ESLint** | Linting de código JavaScript |
 | **PostCSS** | Procesamiento de CSS |
 | **Git** | Control de versiones |
+| **pytest-asyncio** | Testing de funciones asincrónicas |
 
 ---
 
@@ -92,9 +106,10 @@
 ├─────────────────────────────────────────────────────────────────┤
 │  Pages (Home, Menu, Checkout, Dashboard, Admin)                 │
 │  Components (Layout, Client, Admin, Common)                     │
-│  Stores (Zustand) → Auth, Cart, Theme, WebSocket                │
+│  Stores (Zustand) → Auth, Cart, Pedido, Theme, WebSocket       │
 │  Services (Axios) → API calls                                   │
 │  Hooks → useRole, usePedidoWebSocket, useAdminOrdersFeed        │
+│  ProtectedRoute → RBAC en routing                               │
 └─────────────┬──────────────────────────┬────────────────────────┘
               │ HTTP/REST + WebSocket    │
               │ (Token JWT en headers)   │
@@ -102,20 +117,21 @@
 ┌─────────────▼──────────────────────────▼────────────────────────┐
 │                    BACKEND GATEWAY (FastAPI)                    │
 ├─────────────────────────────────────────────────────────────────┤
-│  CORS | Rate Limiting | Auth Middleware | Request/Response      │
+│  TimingMiddleware | RateLimitMiddleware | CORSMiddleware          │
+│  Exception Handlers (AppError + Genérico)                      │
+│  Lifespan (startup/shutdown)                                    │
 └──────────┬────────────────────────────┬──────────────────────────┘
            │                            │
     ┌──────▼────────────┐       ┌──────▼──────────┐
     │   REST API        │       │  WebSocket      │
-    │   (/api/v1)       │       │  Manager        │
-    │                   │       │  (/ws/pedidos)  │
-    │ Modules:          │       │                 │
-    │ - Auth            │       │ Features:       │
-    │ - Usuarios        │       │ - Broadcast     │
-    │ - Pedidos         │       │ - Auth JWT      │
-    │ - Pagos           │       │ - Pool conex.   │
-    │ - Catálogo        │       └─────────────────┘
-    │ - Direcciones     │
+    │   (/api/v1)       │       │  /ws/pedidos    │
+    │                   │       │                 │
+    │ Modules:          │       │ Features:       │
+    │ - Usuarios (auth) │       │ - Rooms:staff   │
+    │ - Pedidos         │       │ - Rooms:user:{id}│
+    │ - Pagos           │       │ - JWT auth      │
+    │ - Direcciones     │       │ - Pool conex.   │
+    │ - Catalogo        │       └─────────────────┘
     │ - Admin           │
     │ - Imagenes        │
     └──────┬────────────┘
@@ -123,10 +139,11 @@
 ┌──────────▼────────────────────────────────────────────────────┐
 │           SERVICE LAYER (Business Logic)                      │
 ├────────────────────────────────────────────────────────────┤
-│ - AuthService         - ProductoService                   │
-│ - UsuarioService      - PedidoService (FSM + UoW)         │
-│ - PagoService         - EstadisticasService               │
-│ - DirectionService    - ImagenService (Cloudinary)        │
+│ - UsuarioService      - ProductoService (Escandallo)         │
+│ - PedidoService (FSM) - CategoriaService                     │
+│ - PagoService        - IngredienteService                   │
+│ - DireccionService   - ImagenService (Cloudinary)           │
+│ - AdminService       - EstadisticasService                  │
 └──────────┬─────────────────────────────────────────────────┘
            │
 ┌──────────▼────────────────────────────────────────────────────┐
@@ -134,29 +151,30 @@
 ├────────────────────────────────────────────────────────────┤
 │ - GenericRepository                                        │
 │ - UnitOfWork (transacciones atómicas)                      │
-│ - Query builders                                           │
+│ - Stock validation + seguridad alerts                       │
 └──────────┬─────────────────────────────────────────────────┘
            │
   ┌────────▼──────────┬──────────────┬──────────────┐
   │                   │              │              │
   ▼                   ▼              ▼              ▼
-PostgreSQL      MercadoPago     Cloudinary    Otros servicios
-(BD principal)  (Pagos)         (Imágenes)
+PostgreSQL      MercadoPago     Cloudinary    Tiempo Real
+(BD principal)  (Pagos)         (Imágenes)    (WebSocket)
 ```
 
 ### 3.2 Patrones de Arquitectura
 
 | Patrón | Implementación | Beneficio |
 |--------|----------------|-----------|
-| **Feature-First** | Módulos organizados por dominio (auth, pedido, etc.) | Escalabilidad, mantenibilidad |
-| **Repository Pattern** | GenericRepository + UnitOfWork | Desacoplamiento, testabilidad |
+| **Feature-First** | Módulos organizados por dominio (usuarios, pedido, etc.) | Escalabilidad, mantenibilidad |
+| **Repository Pattern** | UnitOfWork por módulo | Desacoplamiento, testabilidad |
 | **Unit of Work** | Transacciones atómicas en pedidos | Consistencia de datos |
 | **FSM (Finite State Machine)** | Estados de pedido con reglas validadas | Flujo de negocio claro |
 | **Dependency Injection** | FastAPI dependencies | Flexibilidad, testing |
-| **JWT-based Auth** | Tokens access + refresh | Seguridad stateless |
-| **RBAC (Role-Based Access Control)** | 6 roles con 11 permisos | Control granular de acceso |
-| **WebSocket Manager** | Pool singleton con canales | Comunicación bidireccional |
+| **JWT-based Auth** | Tokens access (30min) + refresh (7 días) en cookies | Seguridad stateless |
+| **RBAC (Role-Based Access Control)** | 6 roles con permisos granulares | Control granular de acceso |
+| **WebSocket Manager** | Rooms por usuario + sala staff | Comunicación bidireccional |
 | **Cloudinary Integration** | Backend-signed uploads | Seguridad en manejo de medios |
+| **Stock Safety Alerts** | Ingredientes con stock de seguridad | Notificaciones automáticas |
 
 ---
 
@@ -168,119 +186,139 @@ PostgreSQL      MercadoPago     Cloudinary    Otros servicios
 foood-store-backend/
 ├── app/
 │   ├── modules/
-│   │   ├── auth/              # Autenticación y autorización
-│   │   ├── usuario/           # Gestión de usuarios
+│   │   ├── auth/              # Schemas y dependencias compartidas
+│   │   ├── usuario/           # Auth + gestión de usuarios
+│   │   │   ├── models.py
+│   │   │   ├── repository.py
+│   │   │   ├── router.py
+│   │   │   ├── schemas.py
+│   │   │   ├── service.py
+│   │   │   └── unit_of_work.py
 │   │   ├── direccion/         # Direcciones de entrega
+│   │   │   ├── models.py
+│   │   │   ├── repository.py
+│   │   │   ├── router.py
+│   │   │   ├── schemas.py
+│   │   │   ├── service.py
+│   │   │   └── unit_of_work.py
 │   │   ├── catalogo/          # Productos e ingredientes
+│   │   │   ├── router.py
+│   │   │   ├── shared_models.py
 │   │   │   ├── categoria/
-│   │   │   └── producto/
-│   │   ├── pedido/            # Dominio central (FSM, UoW)
+│   │   │   │   ├── models.py, repository.py, router.py, schemas.py, service.py, unit_of_work.py
+│   │   │   ├── producto/
+│   │   │   │   ├── models.py, repository.py, router.py, schemas.py, service.py, unit_of_work.py
+│   │   │   └── ingrediente/
+│   │   │       ├── models.py, repository.py, router.py, schemas.py, service.py, unit_of_work.py
+│   │   ├── pedido/            # Dominio central (FSM, UoW, WebSocket)
+│   │   │   ├── models.py
+│   │   │   ├── repository.py
+│   │   │   ├── router.py
+│   │   │   ├── schemas.py
+│   │   │   ├── service.py
+│   │   │   ├── unit_of_work.py
+│   │   │   ├── stock.py      # Validación de stock + alertas
+│   │   │   ├── events.py     # Payloads de eventos WS
+│   │   │   ├── ws_manager.py # ConnectionManager
+│   │   │   └── ws_router.py  # Endpoint WebSocket
 │   │   ├── pagos/             # Integración MercadoPago
+│   │   │   ├── models.py
+│   │   │   ├── repository.py
+│   │   │   ├── router.py
+│   │   │   ├── schemas.py
+│   │   │   ├── service.py
+│   │   │   └── unit_of_work.py
 │   │   ├── imagenes/          # Uploads Cloudinary
-│   │   └── admin/             # Dashboard y estadísticas
-│   └── core/
-│       ├── config.py          # Variables de entorno
-│       ├── database.py        # Conexión y sesión
-│       ├── security.py        # JWT, contraseñas, CORS
-│       ├── repository.py      # GenericRepository
-│       ├── unit_of_work.py    # Transacciones
-│       └── ws_manager.py      # WebSocket Manager
-├── alembic/                   # Migraciones de BD
-├── tests/                     # Suite de tests
-├── main.py                    # Punto de entrada
-└── requirements.txt           # Dependencias Python
+│   │   │   ├── models.py
+│   │   │   ├── repository.py
+│   │   │   ├── router.py
+│   │   │   ├── schemas.py
+│   │   │   ├── service.py
+│   │   │   └── unit_of_work.py
+│   │   └── admin/             # Dashboard y configuración
+│   │       └── router.py      # KPIs, rentabilidad, costo envío
+│   └── __init__.py
+├── core/
+│   ├── config.py          # Variables de entorno (Settings)
+│   ├── database.py        # Conexión y sesión
+│   ├── db.py              # Alias de database
+│   ├── security.py        # JWT, contraseñas, CORS, RoleChecker
+│   ├── repository.py      # GenericRepository
+│   ├── unit_of_work.py    # Patrón UoW base
+│   ├── exceptions.py      # AppError y handlers
+│   ├── rate_limit.py      # RateLimitMiddleware
+│   └── settings_runtime.py # Configuración en runtime (costo envío)
+├── alembic/               # Migraciones de BD
+├── tests/                 # Suite de tests
+│   ├── conftest.py
+│   ├── unit/
+│   │   ├── test_pagos_crear.py
+│   │   ├── test_pedido_fsm.py
+│   │   └── test_pedido_schemas.py
+│   └── integration/
+│       ├── test_auth.py
+│       ├── test_pagos_sincronizar.py
+│       ├── test_pagos_webhook.py
+│       ├── test_pedido_crud.py
+│       └── test_pedido_estado.py
+├── main.py                # Punto de entrada (FastAPI app)
+├── init_db.py             # Script de inicialización
+├── requirements.txt       # Dependencias Python
+└── pytest.ini             # Configuración de pytest
 ```
 
-### 4.2 Módulos Implementados (11)
+### 4.2 Módulos Implementados (8 routers principales)
 
-#### **4.2.1 Auth (Autenticación)**
+#### **4.2.1 Usuarios (Autenticación + Gestión de usuarios)**
 
-**Propósito:** Gestionar login, registro, refresh de tokens y logout
+**Propósito:** Registro, login, logout, refresh tokens, CRUD de usuarios y asignación de roles
 
 **Endpoints:**
-- `POST /api/v1/auth/register` - Registro de nuevo usuario
-- `POST /api/v1/auth/login` - Autenticación (rate limited 5/15 min)
-- `POST /api/v1/auth/refresh` - Renovación de access token
-- `POST /api/v1/auth/logout` - Cierre de sesión y revocación
-- `GET /api/v1/auth/me` - Perfil del usuario autenticado
+- `POST /api/v1/usuarios/registro` - Registro de nuevo usuario
+- `POST /api/v1/usuarios/login` - Autenticación (OAuth2PasswordRequestForm)
+- `POST /api/v1/usuarios/logout` - Cierre de sesión y revocación
+- `POST /api/v1/usuarios/refresh` - Renovación de access token (cookie HttpOnly)
+- `GET /api/v1/usuarios/me` - Perfil del usuario autenticado
+- `PATCH /api/v1/usuarios/me` - Actualizar perfil propio
+- `POST /api/v1/usuarios/me/cambiar-password` - Cambiar contraseña con verificación
+- `GET /api/v1/usuarios` - Listar usuarios activos (ADMIN, con paginación y filtro por rol)
+- `GET /api/v1/usuarios/gestion` - Listar TODOS los usuarios activos e inactivos (ADMIN)
+- `GET /api/v1/usuarios/{id}` - Detalle de usuario (ADMIN)
+- `PATCH /api/v1/usuarios/{id}` - Editar usuario (ADMIN)
+- `PATCH /api/v1/usuarios/{id}/roles` - Asignar roles (ADMIN)
+- `DELETE /api/v1/usuarios/{id}` - Soft delete (ADMIN)
+- `PATCH /api/v1/usuarios/{id}/reactivar` - Reactivar usuario eliminado (ADMIN)
 
 **Tecnología:**
 - Contraseñas hasheadas con bcrypt
 - JWT access token: 30 minutos
-- JWT refresh token: 7 días
+- JWT refresh token: 7 días (en cookie HttpOnly)
 - Rate limiting: 5 intentos fallidos en 15 minutos
+- Refresh token rotation
 
-#### **4.2.2 Usuarios (Gestión de usuarios)**
-
-**Propósito:** CRUD de usuarios y asignación de roles
-
-**Endpoints:**
-- `GET /api/v1/usuarios` - Listar usuarios (admin)
-- `GET /api/v1/usuarios/{id}` - Detalle de usuario
-- `PUT /api/v1/usuarios/{id}` - Editar datos de usuario
-- `DELETE /api/v1/usuarios/{id}` - Soft delete
-
-**Características:**
-- Soft delete (no eliminación física)
-- Asignación de roles dinámicos
-- Auditoría de cambios
-
-#### **4.2.3 Direcciones (Gestión de direcciones)**
-
-**Propósito:** CRUD completo de direcciones de entrega por usuario
-
-**Endpoints:**
-- `GET /api/v1/direcciones` - Listar direcciones del usuario
-- `POST /api/v1/direcciones` - Crear nueva dirección
-- `PUT /api/v1/direcciones/{id}` - Editar dirección
-- `DELETE /api/v1/direcciones/{id}` - Eliminar dirección
-- `PATCH /api/v1/direcciones/{id}/principal` - Marcar como principal
-
-**Características:**
-- Una dirección principal por usuario
-- Campos de geolocalización (calle, número, piso, ciudad, provincia, CP)
-- Referencias personalizadas
-
-#### **4.2.4 Catálogo (Productos y Categorías)**
-
-**Propósito:** Gestión del catálogo de productos e ingredientes
-
-**Sub-módulos:**
-- **Categorías:** CRUD jerárquico con soporte para subcategorías
-- **Productos:** Asociación con categorías, ingredientes y stock
-- **Ingredientes:** Gestión de componentes con control de alérgenos
-
-**Endpoints:**
-- `GET /api/v1/categorias` - Listar categorías (árbol)
-- `POST/PUT/DELETE /api/v1/categorias/{id}` - CRUD categorías
-- `GET /api/v1/productos` - Listar con filtros y paginación
-- `GET/POST/PUT/DELETE /api/v1/productos/{id}` - CRUD productos
-- `GET /api/v1/ingredientes` - Listar ingredientes
-
-**Características:**
-- Categorías jerárquicas (parent_id)
-- Stock dinámico
-- Imágenes con Cloudinary
-- Compatibilidad de ingredientes
-
-#### **4.2.5 Pedidos (Dominio Central)**
+#### **4.2.2 Pedidos (Dominio Central)**
 
 **Propósito:** Gestión completa del ciclo de vida de pedidos con FSM
 
 **Endpoints:**
 - `POST /api/v1/pedidos` - Crear pedido (UoW atómico)
-- `GET /api/v1/pedidos` - Listar propios o todos (según rol)
+- `GET /api/v1/pedidos` - Listar pedidos con paginación (propios para cliente, todos para staff)
 - `GET /api/v1/pedidos/{id}` - Detalle con historial
-- `PATCH /api/v1/pedidos/{id}/estado` - Avanzar FSM
-- `DELETE /api/v1/pedidos/{id}` - Cancelar pedido
+- `GET /api/v1/pedidos/{id}/historial` - Historial de estados del pedido
+- `PATCH /api/v1/pedidos/{id}/estado` - Avanzar FSM (staff: ADMIN/GESTOR_PEDIDOS/CAJERO/COCINA)
+- `PATCH /api/v1/pedidos/{id}/cancelar` - Cancelar pedido con motivo (cliente o staff)
+- `GET /api/v1/pedidos/admin` - Lista enriquecida para staff (con cliente, dirección, productos)
+- `GET /api/v1/pedidos/gestion/todos` - Lista completa para administración
 
 **Características:**
 - **FSM 6 estados:** PENDIENTE → CONFIRMADO → EN_PREPARACION → EN_CAMINO → ENTREGADO / CANCELADO
 - **Validaciones de transición:** Solo transiciones válidas permitidas
-- **Historial append-only:** Registro inmutable de cambios de estado
+- **Historial append-only:** Registro inmutable de cambios de estado con motivo
 - **Unit of Work:** Transacciones atómicas
-- **Snapshots de datos:** Captura de precios históricos
-- **Validaciones de stock:** Pre-validación al crear pedido (400) + pre-validación al confirmar (409) + WebSocket `stock.alerta` al staff
+- **Snapshots de datos:** Captura de precios y nombres históricos
+- **Validaciones de stock:** Pre-validación al crear pedido
+- **Stock de seguridad:** Alertas WebSocket cuando ingredientes cruzan umbral
+- **WebSocket privado:** `pedido.mio.actualizado` a sala del cliente
 
 **Máquina de Estados:**
 
@@ -293,98 +331,159 @@ foood-store-backend/
 | ENTREGADO | 5 | ✅ Sí | — (terminal) |
 | CANCELADO | 6 | ✅ Sí | — (terminal) |
 
-#### **4.2.6 Pagos (Integración MercadoPago)**
+#### **4.2.3 Direcciones (Gestión de direcciones)**
 
-**Propósito:** Gestión de pagos online con MercadoPago
+**Propósito:** CRUD completo de direcciones de entrega por usuario
 
 **Endpoints:**
-- `POST /api/v1/pagos/crear` - Crear pago con token MP
-- `POST /api/v1/pagos/webhook` - IPN MercadoPago
-- `GET /api/v1/pagos/{pedido_id}` - Consultar pago asociado
+- `GET /api/v1/direcciones` - Listar direcciones del usuario
+- `POST /api/v1/direcciones` - Crear nueva dirección
+- `GET /api/v1/direcciones/{id}` - Obtener una dirección específica
+- `PATCH /api/v1/direcciones/{id}` - Editar dirección
+- `PATCH /api/v1/direcciones/{id}/principal` - Marcar como principal
+- `DELETE /api/v1/direcciones/{id}` - Soft delete (con validación de dirección principal)
+- `PATCH /api/v1/direcciones/{id}/reactivar` - Reactivar dirección eliminada
+
+**Características:**
+- Una dirección principal por usuario
+- Campos de geolocalización (calle, número, piso, depto, ciudad, provincia, CP)
+- Referencias personalizadas
+- Reactivación de soft-deleted
+
+#### **4.2.4 Catálogo (Productos, Categorías e Ingredientes)**
+
+**Propósito:** Gestión del catálogo de productos con escandallo automático
+
+**Router base:** `/api/v1/catalogo`
+
+**Sub-módulos:**
+
+**Categorías (`/catalogo/categorias`):**
+- `GET /catalogo/categorias` - Listar categorías (soporta `solo_raiz`, `parent_id`, `incluir_eliminados`)
+- `POST /catalogo/categorias` - Crear categoría (ADMIN/GESTOR_STOCK)
+- `GET /catalogo/categorias/{id}` - Detalle con subcategorías
+- `PATCH /catalogo/categorias/{id}` - Editar categoría
+- `PATCH /catalogo/categorias/{id}/visibilidad` - Toggle activo (ADMIN/GESTOR_STOCK)
+- `PATCH /catalogo/categorias/{id}/reactivar` - Reactivar (ADMIN/GESTOR_STOCK)
+- `DELETE /catalogo/categorias/{id}` - Soft delete con validación de hijos/productos
+
+**Productos (`/catalogo/productos`):**
+- `GET /catalogo/productos` - Listar con filtros (categoría, activo, búsqueda)
+- `POST /catalogo/productos` - Crear producto con escandallo automático (ADMIN/GESTOR_STOCK)
+- `GET /catalogo/productos/{id}` - Detalle con receta completa
+- `PATCH /catalogo/productos/{id}` - Actualizar producto y recalcular escandallo
+- `PATCH /catalogo/productos/{id}/disponibilidad` - Toggle activo (ADMIN/GESTOR_STOCK)
+- `PATCH /catalogo/productos/{id}/imagenes` - Reemplazar array de imágenes (ADMIN/GESTOR_STOCK)
+- `PATCH /catalogo/productos/{id}/reactivar` - Reactivar producto (ADMIN/GESTOR_STOCK)
+- `DELETE /catalogo/productos/{id}` - Soft delete (ADMIN/GESTOR_STOCK)
+
+**Ingredientes (`/catalogo/ingredientes`):**
+- `GET /catalogo/ingredientes` - Listar ingredientes
+- `POST /catalogo/ingredientes` - Crear ingrediente (ADMIN/GESTOR_STOCK)
+- `GET /catalogo/ingredientes/{id}` - Detalle
+- `PATCH /catalogo/ingredientes/{id}` - Actualizar ingrediente (ADMIN/GESTOR_STOCK)
+- `PATCH /catalogo/ingredientes/{id}/reactivar` - Reactivar (ADMIN/GESTOR_STOCK)
+- `DELETE /catalogo/ingredientes/{id}` - Soft delete (ADMIN/GESTOR_STOCK)
+
+**Características:**
+- **Escandallo automático:** `costo_produccion` se calcula desde la suma de ingredientes × cantidad_requerida × costo_unitario
+- Categorías jerárquicas (parent_id)
+- Stock dinámico
+- Múltiples imágenes por producto (`imagenes_url[]`)
+- Flags de alergenicidad en ingredientes
+- **Stock de seguridad:** Cada ingrediente tiene un umbral mínimo (`stock_seguridad`)
+
+#### **4.2.5 Pagos (Integración MercadoPago)**
+
+**Propósito:** Gestión de pagos online con MercadoPago Checkout PRO
+
+**Endpoints:**
+- `POST /api/v1/pagos/crear` - Crear preference de MercadoPago
+- `POST /api/v1/pagos/webhook` - Webhook IPN (público, valida firma HMAC-SHA256)
+- `GET /api/v1/pagos/redirect/success` - Redirección post-aprobación
+- `GET /api/v1/pagos/redirect/failure` - Redirección post-rechazo
+- `GET /api/v1/pagos/redirect/pending` - Redirección post-pendiente
+- `GET /api/v1/pagos/{pedido_id}` - Consultar estado del pago
+- `POST /api/v1/pagos/{pedido_id}/sincronizar` - Sincronización manual con MP (staff)
 
 **Características:**
 - Checkout PRO de MercadoPago
 - Tokenización segura de tarjetas
-- Webhook IPN para notificaciones
+- Webhook IPN con validación de firma HMAC-SHA256
 - Idempotency keys UUID
 - Estados: pending → approved → rejected
+- Redirecciones para flujo completo (MP → backend → frontend)
+- Sincronización manual para casos donde el webhook no llegó
 
 **Formas de pago soportadas:**
--  **MercadoPago:** Para DELIVERY (obligatorio)
--  **Efectivo:** Para EN_LOCAL (pedido queda en PENDIENTE)
+- **MercadoPago:** Para DELIVERY (obligatorio)
+- **Efectivo:** Para EN_LOCAL (pedido queda en PENDIENTE)
 
-#### **4.2.7 Imagenes (Gestión de medios)**
+#### **4.2.6 Imágenes (Gestión de medios con Cloudinary)**
 
-**Propósito:** Upload y eliminación de imágenes con Cloudinary
+**Propósito:** Upload, sincronización y eliminación de imágenes
 
 **Endpoints:**
-- `POST /api/v1/imagenes` - Upload de imagen
-- `DELETE /api/v1/imagenes/{public_id}` - Eliminar imagen
+- `POST /api/v1/imagenes/upload` - Upload de imagen (ADMIN/GESTOR_STOCK)
+- `GET /api/v1/imagenes` - Listar imágenes con paginación y filtros (ADMIN/GESTOR_STOCK)
+- `GET /api/v1/imagenes/{id}` - Obtener imagen por ID (ADMIN/GESTOR_STOCK)
+- `POST /api/v1/imagenes/sincronizar` - Sincronizar BD con Cloudinary (ADMIN/GESTOR_STOCK)
+- `DELETE /api/v1/imagenes/{id}` - Eliminar registro de BD (ADMIN/GESTOR_STOCK)
+- `DELETE /api/v1/imagenes/cloudinary/{public_id}` - Eliminar de Cloudinary + BD (ADMIN/GESTOR_STOCK)
 
 **Características:**
 - Upload firmado en backend (no expone credenciales)
 - Validación MIME (jpg, png, webp)
 - Límite de tamaño: 5MB
-- Almacenamiento en carpetas (foodstore/productos, foodstore/categorias)
+- Carpetas configurables (productos, categorias)
 - Transformaciones automáticas (f_auto, q_auto, c_fill)
+- Sincronización bidireccional con Cloudinary
+- Imágenes por producto almacenadas como array de URLs
+
+#### **4.2.7 Admin (Dashboard y Configuración)**
+
+**Propósito:** KPIs, estadísticas y configuración operativa
+
+**Router base:** `/api/v1/admin`
+
+**Dashboard (`/admin/dashboard`):**
+- `GET /admin/dashboard` - Datos completos: KPIs + gráficos (ADMIN/GESTOR_STOCK/GESTOR_PEDIDOS)
+- `GET /admin/dashboard/productos-mas-vendidos` - Top productos últimos 30 días
+- `GET /admin/dashboard/ingresos-mensuales` - Ingresos por mes (últimos 12)
+- `GET /admin/dashboard/rentabilidad` - Margen y ganancia por producto
+
+**Configuración (`/admin/configuracion`):**
+- `GET /admin/configuracion/costo-envio` - Obtener costo de envío delivery
+- `PATCH /admin/configuracion/costo-envio` - Actualizar costo de envío (en memoria, ADMIN/GESTOR_PEDIDOS)
+
+**Características:**
+- **Costo de envío configurable en runtime** (almacenado en memoria, se resetea al reiniciar)
+- Agregaciones SQL sobre Pedido, DetallePedido y Producto
+- Rentabilidad: margen (%) y ganancia ($) por producto activo
+- Exclusión de pedidos CANCELADO en todas las estadísticas
 
 #### **4.2.8 WebSocket (Comunicación Tiempo Real)**
 
 **Propósito:** Notificaciones bidireccionales en tiempo real
 
-**Canales:**
-- `/ws/pedidos` - Feed general de pedidos
-- Admin channel - Notificaciones administrativas
+**Endpoint:**
+- `WS /api/v1/ws/pedidos?token=<JWT>` - Conexión autenticada
 
-**Características:**
-- Autenticación JWT en handshake
-- Pool de conexiones por canal
-- Broadcast post-commit (fuera del UoW)
-- Reconexión exponencial
-- Eventos: pedido.creado, pedido.estado.cambiado, stock.alerta
+**Arquitectura de Salas (Rooms):**
+- Sala global: `staff:pedidos` (roles: ADMIN, GESTOR_PEDIDOS, CAJERO, COCINA)
+- Sala privada: `user:{usuario_id}` (cada cliente ve solo sus pedidos)
 
-#### **4.2.9 Admin (Administración)**
+**Eventos del Servidor:**
+- `hello` - Bienvenida tras conexión exitosa
+- `pedido.creado` → sala `staff:pedidos`
+- `pedido.estado.cambiado` → sala `staff:pedidos` (pedido completo + historial)
+- `pedido.mio.actualizado` → sala `user:{id}` (subset mínimo para cliente)
+- `stock.alerta` → sala `staff:pedidos` (ingredientes bajo stock de seguridad)
+- `error` - Mensaje de error
 
-**Propósito:** Gestión de usuarios, roles y stock
-
-**Endpoints:**
-- `GET /api/v1/admin/usuarios` - Listar usuarios
-- `PUT /api/v1/admin/usuarios/{id}/roles` - Asignar rol
-
-**Características:**
-- RBAC completo
-- Auditoría de cambios
-- Gestión de permisos
-
-#### **4.2.10 Estadísticas (Analytics)**
-
-**Propósito:** KPIs y métricas del negocio
-
-**Endpoints:**
-- `GET /api/v1/admin/estadisticas/resumen` - KPIs: ventas hoy, ticket promedio
-- `GET /api/v1/admin/estadisticas/ventas` - Ventas por período
-- `GET /api/v1/admin/estadisticas/productos-top` - Top productos por ingresos
-- `GET /api/v1/admin/estadisticas/pedidos-por-estado` - Distribución por estado
-- `GET /api/v1/admin/estadisticas/ingresos` - Ingresos por forma de pago
-
-**Características:**
-- Agregaciones por período (DIARIO, MENSUAL)
-- Snapshot de precios históricos
-- Exclusión de pedidos cancelados
-- Montos DECIMAL(10,2)
-
-#### **4.2.11 Core (Utilidades principales)**
-
-**Componentes:**
-
-| Archivo | Propósito |
-|---------|----------|
-| `config.py` | Lectura de variables de entorno (.env) |
-| `database.py` | Engine de SQLModel y sesión |
-| `security.py` | JWT, bcrypt, CORS |
-| `repository.py` | GenericRepository para todas las entidades |
-| `unit_of_work.py` | Patrón UoW para transacciones atómicas |
-| `ws_manager.py` | Singleton WSManager para WebSockets |
+**Mensajes del Cliente:**
+- `ping` → responde con `pong`
+- `subscribe` → reservado para futuro (hoy no se usa)
 
 ---
 
@@ -395,54 +494,56 @@ foood-store-backend/
 ```
 food-store-frontend/
 ├── src/
+│   ├── app/
+│   │   └── router/
+│   │       └── ProtectedRoute.tsx  # HOC de protección por roles
 │   ├── pages/
-│   │   ├── Home.tsx              # Landing page
-│   │   ├── Checkout.tsx          # MercadoPago + EFECTIVO
-│   │   ├── PedidoExitoso.tsx     # Confirmación con timeline
+│   │   ├── Home.tsx                # Landing page pública
+│   │   ├── Checkout.tsx             # MercadoPago + Efectivo
+│   │   ├── PedidoExitoso.tsx        # Confirmación con timeline
 │   │   ├── auth/
 │   │   │   ├── Login.tsx
 │   │   │   └── Register.tsx
 │   │   ├── client/
-│   │   │   ├── Menu.tsx          # Catálogo
-│   │   │   ├── Carrito.tsx
-│   │   │   ├── MisPedidos.tsx
-│   │   │   └── MiPerfil.tsx
+│   │   │   ├── MiPerfil.tsx        # Perfil y cambiar contraseña
+│   │   │   └── MisPedidos.tsx     # Historial con timeline WS
 │   │   ├── admin/
-│   │   │   ├── Dashboard.tsx     # KPIs y gráficos
+│   │   │   ├── Dashboard.tsx       # KPIs y gráficos
 │   │   │   ├── ProductosAdmin.tsx
 │   │   │   ├── CategoriasAdmin.tsx
 │   │   │   ├── IngredientesAdmin.tsx
-│   │   │   ├── GestorPedidos.tsx
-│   │   │   ├── VistaCocina.tsx
-│   │   │   ├── VistaCajero.tsx
-│   │   │   └── PanelUsuarios.tsx
+│   │   │   ├── GestorPedidos.tsx   # Tabla FSM
+│   │   │   ├── VistaCocina.tsx     # KDS
+│   │   │   ├── VistaCajero.tsx     # Caja
+│   │   │   ├── PanelUsuarios.tsx
+│   │   │   └── MotivoModal.tsx     # Modal de cancelación
 │   │   └── direcciones/
 │   │       └── MisDirecciones.tsx
 │   ├── components/
 │   │   ├── layout/
-│   │   │   ├── Header.tsx
-│   │   │   ├── Sidebar.tsx
-│   │   │   └── Footer.tsx
-│   │   ├── client/
-│   │   │   ├── ProductCard.tsx
-│   │   │   ├── CartItem.tsx
-│   │   │   └── OrderTimeline.tsx
+│   │   │   ├── AdminLayout.tsx     # Layout admin con sidebar
+│   │   │   ├── CartDrawer.tsx     # Carrito deslizable
+│   │   │   ├── Layout.tsx         # Layout público
+│   │   │   ├── Navbar.tsx         # Navegación
+│   │   │   └── ThemeToggle.tsx    # Modo oscuro/claro
 │   │   ├── admin/
-│   │   │   ├── KPICard.tsx
-│   │   │   ├── ChartComponent.tsx
-│   │   │   ├── OrderManagement.tsx
-│   │   │   └── UserManager.tsx
+│   │   │   ├── CategoriaModal.tsx
+│   │   │   ├── ImagePicker.tsx
+│   │   │   ├── ImageUploader.tsx
+│   │   │   ├── IngredienteModal.tsx
+│   │   │   └── ProductoModal.tsx
+│   │   ├── client/
+│   │   │   └── PersonalizarModal.tsx # Personalización de producto
 │   │   └── common/
-│   │       ├── Button.tsx
-│   │       ├── Modal.tsx
-│   │       ├── Form.tsx
-│   │       └── Toast.tsx
+│   │       ├── EmptyState.tsx
+│   │       ├── ProductCard.tsx
+│   │       └── SkeletonCard.tsx
 │   ├── store/
-│   │   ├── authStore.ts          # Auth state (persist)
-│   │   ├── cartStore.ts          # Carrito (persist)
-│   │   ├── themeStore.ts         # Tema (persist)
-│   │   ├── wsStore.ts            # WebSocket status
-│   │   └── uiStore.ts            # UI state
+│   │   ├── authStore.ts           # Auth state (persist)
+│   │   ├── cartStore.ts           # Carrito (persist)
+│   │   ├── pedidoStore.ts         # Pedido actual
+│   │   ├── themeStore.ts          # Tema (persist)
+│   │   └── wsStore.ts             # WebSocket status
 │   ├── services/
 │   │   ├── auth.service.ts
 │   │   ├── catalogo.service.ts
@@ -451,35 +552,37 @@ food-store-frontend/
 │   │   ├── usuario.service.ts
 │   │   ├── direccion.service.ts
 │   │   ├── dashboard.service.ts
+│   │   ├── configuracion.service.ts  # Costo de envío
 │   │   ├── uploads.service.ts
 │   │   ├── websocket.service.ts
 │   │   └── fallbackPolling.service.ts
 │   ├── hooks/
-│   │   ├── useRole.ts            # Check permisos
-│   │   ├── usePedidoWebSocket.ts # Timeline WS
-│   │   └── useAdminOrdersFeed.ts # Feed admin WS
+│   │   ├── useRole.ts              # Check permisos
+│   │   └── usePedidoWebSocket.ts  # Timeline WS
 │   ├── config/
-│   │   └── axios.ts              # Cliente HTTP
+│   │   └── axios.ts               # Cliente HTTP
 │   ├── types/
-│   │   ├── producto.type.ts
+│   │   ├── auth.type.ts
 │   │   ├── categoria.type.ts
-│   │   ├── pedido.type.ts
-│   │   ├── usuario.type.ts
 │   │   ├── dashboard.type.ts
-│   │   └── ingrediente.type.ts
+│   │   ├── direccion.type.ts
+│   │   ├── ingrediente.type.ts
+│   │   ├── pago.type.ts
+│   │   ├── pedido.type.ts
+│   │   └── producto.type.ts
 │   ├── styles/
 │   │   ├── admin.css
-│   │   ├── index.css
-│   │   └── App.css
-│   ├── assets/
-│   ├── App.tsx
+│   │   └── index.css
+│   ├── App.tsx                    # Router principal
 │   └── main.tsx
 ├── public/
 ├── index.html
 ├── vite.config.ts
 ├── tsconfig.json
 ├── tailwind.config.js
-└── package.json
+├── postcss.config.js
+├── package.json
+└── eslint.config.js
 ```
 
 ### 5.2 Gestión de Estado (Zustand Stores)
@@ -488,402 +591,144 @@ food-store-frontend/
 |-------|---------|----------|--------------|
 | **authStore** | `store/authStore.ts` | Usuario, tokens, isAuthenticated | ✅ localStorage |
 | **cartStore** | `store/cartStore.ts` | Items del carrito | ✅ localStorage |
+| **pedidoStore** | `store/pedidoStore.ts` | Pedido actual en checkout | ❌ No persiste |
 | **themeStore** | `store/themeStore.ts` | Modo oscuro/claro | ✅ localStorage |
 | **wsStore** | `store/wsStore.ts` | Estado WebSocket | ❌ No persiste |
-| **uiStore** | `store/uiStore.ts` | Modales, notificaciones | ❌ No persiste |
 
-### 5.3 Servicios (Axios)
+### 5.3 Rutas de la Aplicación
 
-Todos los servicios utilizan Axios con interceptores de autenticación:
+**Rutas Públicas (Cliente):**
+- `/` - Home
+- `/login` - Login
+- `/registro` - Registro
+- `/checkout` - Checkout
+- `/pedido-exitoso/:pedidoId` - Confirmación de pedido
+- `/mis-pedidos` - Historial de pedidos
+- `/mi-perfil` - Perfil del usuario
+- `/mis-direcciones` - Gestión de direcciones
+- `/carrito` - Carrito (en construcción)
 
-| Servicio | Propósito |
-|----------|----------|
-| `auth.service.ts` | Register, login, refresh, logout, me |
-| `catalogo.service.ts` | Listar/crear/editar categorías, productos, ingredientes |
-| `pedido.service.ts` | CRUD pedidos, cambio de estado |
-| `pagos.service.ts` | Crear pago, obtener estado |
-| `usuario.service.ts` | Perfil, editar datos |
-| `direccion.service.ts` | CRUD direcciones, marcar principal |
-| `dashboard.service.ts` | Obtener KPIs y estadísticas |
-| `uploads.service.ts` | Upload/delete imágenes |
-| `websocket.service.ts` | Conexión y reconexión WS |
-| `fallbackPolling.service.ts` | Fallback si WS falla |
+**Rutas Protegidas (Admin/Staff):**
+- `/admin` - Redirección según rol
+- `/admin/productos` - Gestión de productos
+- `/admin/categorias` - Gestión de categorías
+- `/admin/ingredientes` - Gestión de ingredientes
+- `/admin/pedidos` - Gestor de pedidos (FSM)
+- `/admin/cocina` - Vista cocina (KDS)
+- `/admin/cajero` - Vista cajero
+- `/admin/usuarios` - Panel de usuarios
 
-### 5.4 Hooks Personalizados
-
-| Hook | Archivo | Descripción |
-|------|---------|-------------|
-| `useRole` | `hooks/useRole.ts` | Verificar permisos del usuario |
-| `usePedidoWebSocket` | `hooks/usePedidoWebSocket.ts` | Timeline de pedido en tiempo real |
-| `useAdminOrdersFeed` | `hooks/useAdminOrdersFeed.ts` | Feed de pedidos para admin |
-
-### 5.5 Páginas Principales
-
-#### **Home**
-- Landing page pública
-- Links a login/register
-- Información del negocio
-
-#### **Auth (Login/Register)**
-- Formularios con TanStack Form
-- Validación en tiempo real
-- Rate limiting visual
-- Redirección post-autenticación
-
-#### **Menu (Catálogo)**
-- Grid de productos
-- Filtros por categoría
-- Búsqueda con debounce
-- Paginación
-- Skeleton loaders
-- Agregar al carrito
-
-#### **Carrito**
-- Listado de items
-- Modificar cantidades
-- Eliminar productos
-- Subtotal, impuestos, total
-- Botón checkout
-
-#### **Checkout**
-- Selector de forma de pago:
-  -  MercadoPago CardPayment
-  -  Efectivo
-- Selector de dirección
-- Tipo de entrega (EN_LOCAL, DELIVERY)
-- MercadoPago Brick integrado
-
-#### **PedidoExitoso**
-- Confirmación de compra
-- Número de pedido
-- Timeline de estado con WS
-- Link a "Mis Pedidos"
-
-#### **MisPedidos**
-- Historial de pedidos del cliente
-- Timeline interactivo con WS
-- Estados visuales
-- Cancelación (si PENDIENTE/CONFIRMADO)
-
-#### **Dashboard (Admin)**
-- 4 KPIs: ventas hoy, ticket promedio, pedidos activos, mes actual
-- Gráficos recharts:
-  - LineChart: Ventas por período
-  - BarChart: Top 5 productos
-  - PieChart: Distribución por estado
-- Filtros de período (DIARIO, MENSUAL)
-
-#### **Admin - Gestión de Productos**
-- CRUD productos
-- Upload de imagen (Cloudinary)
-- Selector de categorías e ingredientes
-- Stock y precios
-- Soft delete
-
-#### **Admin - Gestión de Categorías**
-- Árbol jerárquico
-- CRUD categorías
-- Imagen por categoría
-- Ordenamiento por parent
-
-#### **Admin - Gestión de Ingredientes**
-- CRUD ingredientes
-- Flag alérgeno
-- Control de stock
-
-#### **Admin - Gestor de Pedidos**
-- Tabla de pedidos con FSM
-- Botones para avanzar estado
-- Historial de cambios
-- Búsqueda y filtros
-
-#### **Admin - Vista Cocina**
-- Pedidos EN_PREPARACION
-- Botones: Marcar EN_CAMINO, ENTREGADO
-- Orden de preparación visual
-
-#### **Admin - Vista Cajero**
-- Pedidos PENDIENTE/CONFIRMADO
-- Confirmación de pago manual
-- Crear pedidos rápidos
-
-#### **Admin - Panel de Usuarios**
-- Listar usuarios
-- Asignar roles
-- Gestión de permisos
-- Soft delete
-
-#### **MisDirecciones**
-- Listar direcciones
-- Crear/editar/eliminar
-- Marcar dirección principal
-- Formulario geolocalización
+**Redirección por Rol en Admin:**
+- COCINA → `/admin/cocina`
+- CAJERO → `/admin/cajero`
+- GESTOR_STOCK → `/admin/productos`
+- ADMIN/GESTOR_PEDIDOS → Dashboard
 
 ---
 
 ## 6. MODELO DE DATOS
 
-### 6.1 Diagrama ER (Entidad-Relación)
-
-```
-┌─────────────────────┐
-│      Usuario        │
-├─────────────────────┤
-│ id (PK)             │
-│ email (UNIQUE)      │
-│ password (hash)     │
-│ nombre              │
-│ apellido            │
-│ celular             │
-│ activo              │
-│ creado_en           │
-│ actualizado_en      │
-│ eliminado_en        │
-└──────────┬──────────┘
-           │
-      ┌────┴──────┐
-      │ 1:N       │
-      ▼           ▼
-┌────────────┐ ┌──────────────┐
-│UsuarioRol │ │  Pedido      │
-├────────────┤ ├──────────────┤
-│ usuario_id │ │ id (PK)      │
-│ rol_codigo │ │ usuario_id   │
-│ asignado_en│ │ direccion_id │
-│ expires_at │ │ estado_cod.  │
-└────────────┘ │ forma_pago   │
-               │ tipo_entrega │
-        ┌──────┤ subtotal     │
-        │      │ descuento    │
-        │      │ costo_envio  │
-        │      │ total        │
-        │      │ creado_en    │
-        │      │ actualizado_ │
-        │      └──────────────┘
-        │           │
-    ┌───┴─┐         │ 1:N
-    │     │         ▼
-    │   ┌─────────────────────┐
-    │   │ DetallePedido       │
-    │   ├─────────────────────┤
-    │   │ detalle_id (PK)     │
-    │   │ pedido_id (FK)      │
-    │   │ producto_id (FK)    │
-    │   │ cantidad            │
-    │   │ precio_snapshot     │
-    │   │ subtotal_snap       │
-    │   │ personalizacion[]   │
-    │   │ creado_en           │
-    │   └─────────────────────┘
-    │
-┌───┴────────────────┐
-│      Rol           │
-├────────────────────┤
-│ codigo (PK)        │
-│ nombre             │
-│ descripcion        │
-└────────────────────┘
-    │
-    │ 1:N
-    ▼
-┌────────────────┐
-│  RolPermiso    │
-├────────────────┤
-│ rol_codigo (FK)│
-│ permiso_id(FK)│
-└────────────────┘
-    │
-    └─────────┬──────────────┐
-              │ 1:N          │
-              ▼              ▼
-    ┌──────────────────┐
-    │   Permiso        │
-    ├──────────────────┤
-    │ id (PK)          │
-    │ nombre (UNIQUE)  │
-    │ descripcion      │
-    └──────────────────┘
-
-┌──────────────────────────┐
-│      Categoria           │
-├──────────────────────────┤
-│ id (PK)                  │
-│ nombre                   │
-│ descripcion              │
-│ activo                   │
-│ creado_en                │
-│ actualizado_en           │
-│ eliminado_en             │
-│ parent_id (FK) [opcional]│
-│ imagen_url               │
-└──────────┬───────────────┘
-           │ 1:N
-           ▼
-    ┌──────────────────────┐
-    │ProductoCategoria     │
-    ├──────────────────────┤
-    │ producto_id (FK)     │
-    │ categoria_id (FK)    │
-    │ (PK compuesta)       │
-    └──────────────────────┘
-           ▲
-           │ 1:N
-           │
-    ┌──────────────────────┐
-    │    Producto          │
-    ├──────────────────────┤
-    │ id (PK)              │
-    │ nombre               │
-    │ descripcion          │
-    │ imagen_url           │
-    │ stock_cantidad       │
-    │ activo               │
-    │ costo_produccion     │
-    │ margen_ganancia      │
-    │ precio               │
-    │ creado_en            │
-    │ actualizado_en       │
-    │ eliminado_en         │
-    └──────────┬───────────┘
-               │ 1:N
-               ▼
-    ┌──────────────────────┐
-    │ProductoIngrediente   │
-    ├──────────────────────┤
-    │ producto_id (FK)     │
-    │ ingrediente_id (FK)  │
-    │ cantidad_requerida   │
-    │ es_removible         │
-    │ (PK compuesta)       │
-    └──────────────────────┘
-            ▲
-            │ 1:N
-            │
-    ┌──────────────────────┐
-    │   Ingrediente        │
-    ├──────────────────────┤
-    │ id (PK)              │
-    │ nombre               │
-    │ disponible           │
-    │ es_alergeno          │
-    │ stock                │
-    │ creado_en            │
-    │ actualizado_en       │
-    │ eliminado_en         │
-    └──────────────────────┘
-
-┌──────────────────────────┐
-│  DireccionEntrega        │
-├──────────────────────────┤
-│ id (PK)                  │
-│ usuario_id (FK)          │
-│ alias                    │
-│ calle                    │
-│ numero                   │
-│ piso                     │
-│ depto                    │
-│ ciudad                   │
-│ provincia                │
-│ codigo_postal            │
-│ referencia               │
-│ es_principal             │
-│ creado_en                │
-└──────────────────────────┘
-
-┌──────────────────────────┐
-│ HistorialEstadoPedido    │
-├──────────────────────────┤
-│ id (PK)                  │
-│ pedido_id (FK)           │
-│ estado_desde (nullable)  │
-│ estado_hacia             │
-│ usuario_id (FK)          │
-│ motivo (nullable)        │
-│ creado_en                │
-│ (Append-only table)      │
-└──────────────────────────┘
-
-┌──────────────────────────┐
-│        Pago              │
-├──────────────────────────┤
-│ id (PK)                  │
-│ pedido_id (FK)           │
-│ mp_payment_id            │
-│ mp_status                │
-│ mp_status_detail         │
-│ transaction_amount       │
-│ payment_method_id        │
-│ external_reference       │
-│ idempotency_key (UNIQUE) │
-│ preference_id            │
-│ init_point               │
-│ creado_en                │
-│ actualizado_en           │
-└──────────────────────────┘
-
-┌──────────────────────────┐
-│       Imagen             │
-├──────────────────────────┤
-│ id (PK)                  │
-│ public_id (Cloudinary)   │
-│ url                      │
-│ secure_url               │
-│ formato                  │
-│ ancho                    │
-│ alto                     │
-│ bytes                    │
-│ folder                   │
-│ recurso_tipo             │
-│ subido_por_id (FK)       │
-│ nombre_archivo           │
-│ creado_en                │
-│ eliminado_en             │
-└──────────────────────────┘
-```
-
-### 6.2 Entidades Principales
+### 6.1 Entidades Principales
 
 #### **Usuario**
-Identidad de usuario con autenticación y relación a roles
+```
+id, email (UNIQUE), password (hash bcrypt), nombre, apellido, celular
+activo, rol (JSON array de códigos), creado_en, actualizado_en
+eliminado_en (soft delete)
+```
 
-#### **Rol**
-Define permisos y responsabilidades: ADMIN, CLIENTE, GESTOR_STOCK, GESTOR_PEDIDOS, CAJERO, COCINA
+#### **Rol** (valores permitidos en `rol`)
+```
+ADMIN, CLIENTE, GESTOR_STOCK, GESTOR_PEDIDOS, CAJERO, COCINA
+```
 
 #### **Pedido**
-Entidad central con FSM de 6 estados, captura de valores históricos y relación a detalles
+```
+id, usuario_id, direccion_id, estado_codigo (FSM)
+forma_pago, tipo_entrega (DELIVERY/EN_LOCAL)
+subtotal, descuento, costo_envio, total
+creado_en, actualizado_en
+```
 
 #### **DetallePedido**
-Detalles atomizados de cada pedido con snapshots de precios inmutables
+```
+id, pedido_id, producto_id
+cantidad, precio_snapshot, subtotal_snap
+nombre_snapshot (nombre del producto al momento)
+personalizacion (JSON array de strings)
+creado_en
+```
 
-#### **HistorialEstadoPedido**
-Registro append-only de transiciones de estado con auditoría
+#### **HistorialEstadoPedido** (Append-only)
+```
+id, pedido_id, estado_desde (nullable), estado_hacia
+usuario_id, motivo (nullable), creado_en
+```
 
 #### **Producto**
-Artículo del catálogo con stock, precios y margen de ganancia
+```
+id, nombre, descripcion
+imagenes_url (JSON array de URLs)
+stock_cantidad, activo
+costo_produccion (calculado desde escandallo)
+margen_ganancia, precio
+creado_en, actualizado_en, eliminado_en
+```
+
+#### **ProductoIngrediente**
+```
+producto_id, ingrediente_id
+cantidad_requerida, es_removible
+```
 
 #### **Categoria**
-Clasificación jerárquica de productos con soporte para subcategorías
+```
+id, nombre, descripcion, activo
+imagen_url, parent_id (FK a sí misma, opcional)
+creado_en, actualizado_en, eliminado_en
+```
 
 #### **Ingrediente**
-Componentes de productos con flags de alergenicidad
+```
+id, nombre, disponible, es_alergeno
+stock, stock_seguridad, unidad, costo_unitario
+creado_en, actualizado_en, eliminado_en
+```
 
 #### **Pago**
-Registro de transacciones MercadoPago con estados y referencias
+```
+id, pedido_id, mp_payment_id, mp_status
+mp_status_detail, transaction_amount
+payment_method_id, external_reference
+idempotency_key (UNIQUE), preference_id
+init_point, creado_en, actualizado_en
+```
 
 #### **DireccionEntrega**
-Direcciones de entrega asociadas a usuarios
+```
+id, usuario_id, alias, calle, numero
+piso, depto, ciudad, provincia, codigo_postal
+referencia, es_principal
+creado_en, actualizado_en, eliminado_en
+```
 
 #### **Imagen**
-Registros de imágenes almacenadas en Cloudinary
+```
+id, public_id (Cloudinary), url, secure_url
+formato, ancho, alto, bytes
+folder, recurso_tipo
+nombre_archivo, subido_por_id
+creado_en, eliminado_en
+```
 
 ---
 
 ## 7. API REST - ENDPOINTS
 
-### 7.1 Prefix y Configuración
+### 7.1 Prefijo y Configuración
 
 - **Base URL:** `/api/v1`
-- **Documentación:** `/docs` (Swagger UI) y `/redoc` (ReDoc)
+- **Documentación:** `/api/v1/docs` (Swagger UI)
 - **Error Format:** RFC 7807 (Problem Details)
 - **Authentication:** Bearer token en header `Authorization`
 
@@ -891,72 +736,96 @@ Registros de imágenes almacenadas en Cloudinary
 
 | Módulo | Método | Ruta | Rol | Descripción |
 |--------|--------|------|-----|-------------|
-| **AUTH** | POST | `/auth/register` | Público | Registro de usuario |
-|  | POST | `/auth/login` | Público | Login (rate limited) |
-|  | POST | `/auth/refresh` | Público | Refresco de token |
-|  | POST | `/auth/logout` | Bearer | Logout |
-|  | GET | `/auth/me` | Bearer | Perfil del usuario |
-| **USUARIOS** | GET | `/usuarios` | ADMIN | Listar usuarios |
+| **USUARIOS** | POST | `/usuarios/registro` | Público | Registro de usuario |
+|  | POST | `/usuarios/login` | Público | Login (OAuth2 form) |
+|  | POST | `/usuarios/logout` | Bearer | Logout (revoca refresh) |
+|  | POST | `/usuarios/refresh` | Público | Refresco de token (cookie) |
+|  | GET | `/usuarios/me` | Bearer | Perfil propio |
+|  | PATCH | `/usuarios/me` | Bearer | Actualizar perfil propio |
+|  | POST | `/usuarios/me/cambiar-password` | Bearer | Cambiar contraseña |
+|  | GET | `/usuarios` | ADMIN | Listar activos (pagin.) |
+|  | GET | `/usuarios/gestion` | ADMIN | Listar todos |
 |  | GET | `/usuarios/{id}` | ADMIN | Detalle de usuario |
-|  | PUT | `/usuarios/{id}` | ADMIN | Editar usuario |
-|  | DELETE | `/usuarios/{id}` | ADMIN | Soft delete usuario |
-| **CATEGORIAS** | GET | `/categorias` | Público | Listar categorías (árbol) |
-|  | POST | `/categorias` | ADMIN | Crear categoría |
-|  | PUT | `/categorias/{id}` | ADMIN | Editar categoría |
-|  | DELETE | `/categorias/{id}` | ADMIN | Soft delete categoría |
-| **PRODUCTOS** | GET | `/productos` | Público | Listar con filtros |
-|  | GET | `/productos/{id}` | Público | Detalle con ingredientes |
-|  | POST | `/productos` | ADMIN | Crear producto |
-|  | PUT | `/productos/{id}` | ADMIN | Editar producto |
-|  | PATCH | `/productos/{id}` | ADMIN | Toggle disponible |
-|  | DELETE | `/productos/{id}` | ADMIN | Soft delete producto |
-| **INGREDIENTES** | GET | `/ingredientes` | Público | Listar ingredientes |
-|  | POST | `/ingredientes` | ADMIN | Crear ingrediente |
-|  | PUT | `/ingredientes/{id}` | ADMIN | Editar ingrediente |
-|  | DELETE | `/ingredientes/{id}` | ADMIN | Soft delete ingrediente |
-| **PEDIDOS** | POST | `/pedidos` | CLIENT/CAJERO | Crear pedido (UoW) |
-|  | GET | `/pedidos` | CLIENT/STAFF | Listar |
-|  | GET | `/pedidos/{id}` | Propietario/STAFF | Detalle + historial |
-|  | PATCH | `/pedidos/{id}/estado` | STAFF | Avanzar FSM |
-|  | DELETE | `/pedidos/{id}` | CLIENT/STAFF | Cancelar |
-|  | GET | `/pedidos/admin` | STAFF | Lista enriquecida |
-| **PAGOS** | POST | `/pagos/crear` | CLIENT/CAJERO | Crear pago MP |
+|  | PATCH | `/usuarios/{id}` | ADMIN | Editar usuario |
+|  | PATCH | `/usuarios/{id}/roles` | ADMIN | Asignar roles |
+|  | DELETE | `/usuarios/{id}` | ADMIN | Soft delete |
+|  | PATCH | `/usuarios/{id}/reactivar` | ADMIN | Reactivar |
+| **DIRECCIONES** | GET | `/direcciones` | Bearer | Listar propias |
+|  | POST | `/direcciones` | Bearer | Crear dirección |
+|  | GET | `/direcciones/{id}` | Bearer | Obtener dirección |
+|  | PATCH | `/direcciones/{id}` | Bearer | Editar dirección |
+|  | PATCH | `/direcciones/{id}/principal` | Bearer | Marcar principal |
+|  | DELETE | `/direcciones/{id}` | Bearer | Eliminar (soft) |
+|  | PATCH | `/direcciones/{id}/reactivar` | Bearer | Reactivar |
+| **CATÁLOGO** | GET | `/catalogo/categorias` | Público | Listar categorías |
+|  | POST | `/catalogo/categorias` | ADMIN/GESTOR_STOCK | Crear categoría |
+|  | GET | `/catalogo/categorias/{id}` | Público | Detalle categoría |
+|  | PATCH | `/catalogo/categorias/{id}` | ADMIN/GESTOR_STOCK | Editar categoría |
+|  | PATCH | `/catalogo/categorias/{id}/visibilidad` | ADMIN/GESTOR_STOCK | Toggle activo |
+|  | PATCH | `/catalogo/categorias/{id}/reactivar` | ADMIN/GESTOR_STOCK | Reactivar |
+|  | DELETE | `/catalogo/categorias/{id}` | ADMIN/GESTOR_STOCK | Soft delete |
+|  | GET | `/catalogo/productos` | Público | Listar productos |
+|  | POST | `/catalogo/productos` | ADMIN/GESTOR_STOCK | Crear (escandallo) |
+|  | GET | `/catalogo/productos/{id}` | Público | Detalle con receta |
+|  | PATCH | `/catalogo/productos/{id}` | ADMIN/GESTOR_STOCK | Editar |
+|  | PATCH | `/catalogo/productos/{id}/disponibilidad` | ADMIN/GESTOR_STOCK | Toggle |
+|  | PATCH | `/catalogo/productos/{id}/imagenes` | ADMIN/GESTOR_STOCK | Actualizar imgs |
+|  | PATCH | `/catalogo/productos/{id}/reactivar` | ADMIN/GESTOR_STOCK | Reactivar |
+|  | DELETE | `/catalogo/productos/{id}` | ADMIN/GESTOR_STOCK | Soft delete |
+|  | GET | `/catalogo/ingredientes` | Público | Listar ingredientes |
+|  | POST | `/catalogo/ingredientes` | ADMIN/GESTOR_STOCK | Crear ingrediente |
+|  | GET | `/catalogo/ingredientes/{id}` | Público | Detalle ingrediente |
+|  | PATCH | `/catalogo/ingredientes/{id}` | ADMIN/GESTOR_STOCK | Editar |
+|  | PATCH | `/catalogo/ingredientes/{id}/reactivar` | ADMIN/GESTOR_STOCK | Reactivar |
+|  | DELETE | `/catalogo/ingredientes/{id}` | ADMIN/GESTOR_STOCK | Soft delete |
+| **PEDIDOS** | POST | `/pedidos` | Bearer | Crear pedido (UoW) |
+|  | GET | `/pedidos` | Bearer | Listar (propios/staff) |
+|  | GET | `/pedidos/{id}` | Propietario/Staff | Detalle + historial |
+|  | GET | `/pedidos/{id}/historial` | Propietario/Staff | Historial estados |
+|  | PATCH | `/pedidos/{id}/estado` | Staff | Avanzar FSM |
+|  | PATCH | `/pedidos/{id}/cancelar` | Bearer | Cancelar con motivo |
+|  | GET | `/pedidos/admin` | Staff | Lista enriquecida |
+|  | GET | `/pedidos/gestion/todos` | Staff | Lista completa |
+| **PAGOS** | POST | `/pagos/crear` | Bearer | Crear preference MP |
 |  | POST | `/pagos/webhook` | Público | Webhook IPN MP |
-|  | GET | `/pagos/{pedido_id}` | Propietario/ADMIN | Consulta pago |
-| **IMAGENES** | POST | `/imagenes` | ADMIN | Upload Cloudinary |
-|  | DELETE | `/imagenes/{public_id}` | ADMIN | Eliminar Cloudinary |
-| **DIRECCIONES** | GET | `/direcciones` | CLIENT | Listar |
-|  | POST | `/direcciones` | CLIENT | Crear |
-|  | PUT | `/direcciones/{id}` | CLIENT | Editar |
-|  | DELETE | `/direcciones/{id}` | CLIENT | Eliminar |
-|  | PATCH | `/direcciones/{id}/principal` | CLIENT | Marcar principal |
-| **ADMIN** | GET | `/admin/usuarios` | ADMIN | Listar usuarios |
-|  | PUT | `/admin/usuarios/{id}/roles` | ADMIN | Asignar rol |
-| **ESTADÍSTICAS** | GET | `/admin/estadisticas/resumen` | ADMIN | KPIs: ventas, ticket |
-|  | GET | `/admin/estadisticas/ventas` | ADMIN | Ventas por período |
-|  | GET | `/admin/estadisticas/productos-top` | ADMIN | Top 5 productos |
-|  | GET | `/admin/estadisticas/pedidos-por-estado` | ADMIN | Dist. por estado |
-|  | GET | `/admin/estadisticas/ingresos` | ADMIN | Ingresos por forma |
-| **WEBSOCKET** | WS | `/ws/pedidos?token=<jwt>` | Bearer (JWT) | Feed de pedidos |
+|  | GET | `/pagos/redirect/success` | Público | Redir. aprobación |
+|  | GET | `/pagos/redirect/failure` | Público | Redir. rechazo |
+|  | GET | `/pagos/redirect/pending` | Público | Redir. pendiente |
+|  | GET | `/pagos/{pedido_id}` | Propietario/Staff | Consultar pago |
+|  | POST | `/pagos/{pedido_id}/sincronizar` | Staff | Sync manual MP |
+| **IMÁGENES** | POST | `/imagenes/upload` | ADMIN/GESTOR_STOCK | Upload Cloudinary |
+|  | GET | `/imagenes` | ADMIN/GESTOR_STOCK | Listar (paginado) |
+|  | GET | `/imagenes/{id}` | ADMIN/GESTOR_STOCK | Detalle imagen |
+|  | POST | `/imagenes/sincronizar` | ADMIN/GESTOR_STOCK | Sync con Cloud. |
+|  | DELETE | `/imagenes/{id}` | ADMIN/GESTOR_STOCK | Eliminar registro |
+|  | DELETE | `/imagenes/cloudinary/{public_id}` | ADMIN/GESTOR_STOCK | Eliminar Cloud. |
+| **ADMIN** | GET | `/admin/dashboard` | Staff | KPIs + gráficos |
+|  | GET | `/admin/dashboard/productos-mas-vendidos` | Staff | Top productos |
+|  | GET | `/admin/dashboard/ingresos-mensuales` | Staff | Ingresos por mes |
+|  | GET | `/admin/dashboard/rentabilidad` | Staff | Rentabilidad |
+|  | GET | `/admin/configuracion/costo-envio` | Staff | Obtener costo envío |
+|  | PATCH | `/admin/configuracion/costo-envio` | ADMIN/GESTOR_PEDIDOS | Actualizar costo |
+| **WEBSOCKET** | WS | `/ws/pedidos?token=<jwt>` | Bearer | Feed tiempo real |
 
 ---
 
 ## 8. SISTEMA DE SEGURIDAD Y RBAC
 
-### 8.1 Autenticación (JWT)
+### 8.1 Autenticación (JWT + Cookies HttpOnly)
 
 **Flujo:**
-1. Usuario envía credenciales a `/auth/login`
-2. Backend valida contraseña (bcrypt) y genera JWT
-3. **Access Token:** 30 minutos (operaciones)
-4. **Refresh Token:** 7 días (renovación segura)
-5. Frontend almacena en localStorage (encrypted cookies en producción)
-6. En cada request: `Authorization: Bearer <access_token>`
+1. Usuario envía credenciales a `/usuarios/login` (OAuth2PasswordRequestForm)
+2. Backend valida contraseña (bcrypt) y genera JWTs
+3. **Access Token:** 30 minutos (devuelto en JSON)
+4. **Refresh Token:** 7 días (en cookie HttpOnly)
+5. Frontend almacena access_token en localStorage
+6. Refresh token回転 en cookie automáticamente
+7. En cada request: `Authorization: Bearer <access_token>`
 
 **Componentes:**
-- `PyJWT` para generación/validación
+- `python-jose` para generación/validación de JWT
 - `bcrypt` para hashing de contraseñas
-- Refresh token rotación
+- Cookies HttpOnly para refresh token (seguro contra XSS)
 - Rate limiting 5/15 min en login/register
 
 ### 8.2 RBAC (Role-Based Access Control)
@@ -965,67 +834,55 @@ Registros de imágenes almacenadas en Cloudinary
 
 | Rol | Código | Responsabilidades |
 |-----|--------|------------------|
-| **Administrador** | ADMIN | Control total: CRUD todo, estadísticas, usuarios |
+| **Administrador** | ADMIN | Control total: CRUD todo, estadísticas, usuarios, configuración |
 | **Cliente Tienda** | CLIENTE | Comprar, perfil, pedidos propios, direcciones |
 | **Gestor de Stock** | GESTOR_STOCK | Productos, categorías, ingredientes, imágenes |
-| **Gestor de Pedidos** | GESTOR_PEDIDOS | Avanzar todos los pedidos, ver todos |
-| **Cajero** | CAJERO | Confirmar pagos, crear pedidos, ver pedidos |
+| **Gestor de Pedidos** | GESTOR_PEDIDOS | Avanzar pedidos, ver todos, configurar costo envío |
+| **Cajero** | CAJERO | Confirmar pagos, crear pedidos, ver pedidos, sincronizar pagos |
 | **Cocina** | COCINA | Ver pedidos, avanzar EN_PREPARACION→ENTREGADO |
-
-#### **11 Permisos**
-
-| Permiso | Descripción |
-|---------|-------------|
-| `VER_CATALOGO` | Ver productos, categorías, ingredientes |
-| `GESTIONAR_PRODUCTOS` | CRUD productos |
-| `GESTIONAR_CATEGORIAS` | CRUD categorías |
-| `GESTIONAR_INGREDIENTES` | CRUD ingredientes |
-| `CREAR_PEDIDO` | Realizar pedidos |
-| `VER_PEDIDOS_PROPIOS` | Ver historial personal |
-| `GESTIONAR_PEDIDOS` | Ver y gestionar todos |
-| `VER_PERFIL_PROPIO` | Acceder a /me |
-| `GESTIONAR_USUARIOS` | Admin usuarios |
-| `GESTIONAR_DIRECCIONES` | CRUD direcciones |
-| `GESTIONAR_IMAGENES` | Upload/delete imágenes |
 
 #### **Matriz de Permisos**
 
 | Permiso | ADMIN | CLIENTE | GESTOR_STOCK | GESTOR_PEDIDOS | CAJERO | COCINA |
 |---------|-------|---------|--------------|----------------|--------|--------|
-| VER_CATALOGO | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| GESTIONAR_PRODUCTOS | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| GESTIONAR_CATEGORIAS | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| GESTIONAR_INGREDIENTES | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| CREAR_PEDIDO | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
-| VER_PEDIDOS_PROPIOS | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ |
-| GESTIONAR_PEDIDOS | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| VER_PERFIL_PROPIO | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| GESTIONAR_USUARIOS | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| GESTIONAR_DIRECCIONES | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| GESTIONAR_IMAGENES | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Ver catálogo | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Gestionar productos | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Gestionar categorías | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Gestionar ingredientes | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Crear pedido | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Ver pedidos propios | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Gestionar pedidos | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Ver perfil propio | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Gestionar usuarios | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Gestionar direcciones | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Gestionar imágenes | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Ver dashboard | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Configurar costo envío | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Sincronizar pagos | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
 
 ### 8.3 Protección CORS
 
 ```python
-CORS_ORIGINS = [
-    "http://localhost:5173",    # Dev frontend
-    "http://localhost:3000",    # Alt frontend
-    "https://yourdomain.com",   # Producción
-]
+CORSMiddleware(
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 ```
 
 ### 8.4 Rate Limiting
 
 - **Límite:** 5 intentos fallidos
 - **Ventana:** 15 minutos
-- **Endpoints:** `/auth/login` y `/auth/register`
+- **Middleware:** `RateLimitMiddleware` (personalizado)
 - **Respuesta:** HTTP 429 + header `Retry-After`
-
-### 8.5 HTTPS/TLS
-
-- **En producción:** Requiere SSL/TLS
-- **En desarrollo:** HTTP permitido
-- **Cookies:** Secure flag en producción
 
 ---
 
@@ -1035,51 +892,38 @@ CORS_ORIGINS = [
 
 #### **Configuración**
 
+```python
+MP_ACCESS_TOKEN = "..."
+MP_PUBLIC_KEY = "..."
+MP_NOTIFICATION_URL = "http://localhost:8000/api/v1/pagos/webhook"
+MP_WEBHOOK_SECRET = "..."  # Para validar firma HMAC-SHA256
+FRONTEND_URL = "http://localhost:5173"
 ```
-SDK: mercadopago==2.3.0
-Modo: Checkout PRO
-Tokenización: Tarjeta tokenizada por SDK React
-```
 
-#### **Flujo de Pago**
+#### **Flujo de Pago Completo**
 
-1. **Frontend:** Cliente completa datos en CardPayment
-2. **SDK MP:** Tokeniza la tarjeta de forma segura
-3. **Frontend → Backend:** Envía token + crear pago request
-4. **Backend:** Genera pago con MercadoPago SDK
-5. **MercadoPago:** Procesa pago y retorna status
-6. **Backend → Webhook:** Recibe notificación IPN
-7. **Backend:** Actualiza estado pedido basado en pago
-8. **WebSocket:** Notifica al cliente en tiempo real
-
-#### **Endpoints MercadoPago**
-
-| Endpoint | Propósito |
-|----------|----------|
-| `POST /payments` | Crear pago con token |
-| `GET /payments/{id}` | Consultar estado |
-| `POST /v1/merchant_orders` | Crear orden (opcional) |
+1. **Frontend:** Cliente selecciona productos y completa checkout
+2. **Frontend → Backend:** `POST /pagos/crear` con `pedido_id`
+3. **Backend:** Genera preference con MercadoPago SDK
+4. **Backend:** Retorna `init_point` (URL de pago MP)
+5. **Frontend:** Redirige a `init_point` (MercadoPago checkout)
+6. **Post-pago:** MP redirige a `/pagos/redirect/{status}?pedido_id=X`
+7. **Backend:** Redirige a `/pedido-exitoso/{id}?status=X`
+8. **Webhook:** MP envía notificación IPN al backend (validación HMAC)
+9. **Backend:** Actualiza estado pedido/pago
+10. **WebSocket:** Notifica al cliente en tiempo real
 
 #### **Estados de Pago**
 
 ```
-pending → approved → rejected / voided
+pending → approved / rejected / voided
 ```
-
-#### **Formas de Pago Permitidas**
-
-| Forma | Tipo Entrega | Implementación |
-|-------|-------------|----------------|
-| MercadoPago | Cualquiera | Obligatorio |
-| Efectivo | EN_LOCAL | Pedido queda en PENDIENTE (cajero confirma) |
-| Efectivo | DELIVERY | ❌ No permitido |
 
 #### **Seguridad**
 
-- ✅ Tokenización segura (nunca pasan datos de tarjeta por servidor)
-- ✅ Idempotency keys UUID para evitar cobros duplicados
-- ✅ Webhook firmado y validado
-- ✅ Manejo seguro de credenciales en backend
+- ✅ Validación de firma HMAC-SHA256 en webhook (`MP_WEBHOOK_SECRET`)
+- ✅ Idempotency keys para evitar cobros duplicados
+- ✅ Redirecciones firmadas para flujo completo
 
 ### 9.2 Cloudinary
 
@@ -1089,46 +933,25 @@ pending → approved → rejected / voided
 CLOUDINARY_CLOUD_NAME = "..."
 CLOUDINARY_API_KEY = "..."
 CLOUDINARY_API_SECRET = "..."
+CLOUDINARY_FOLDER = "foodstore"
+CLOUDINARY_MAX_FILE_MB = 5
 ```
 
 #### **Características**
 
-- **Upload:** Backend-signed (SDK Python)
-- **Folders:** foodstore/productos, foodstore/categorias
+- **Upload:** Backend-signed (SDK Python, no expone credenciales)
+- **Folders:** `foodstore/productos`, `foodstore/categorias`
 - **Formatos:** jpg, jpeg, png, webp
 - **Límite:** 5MB por archivo
 - **Transformaciones:** f_auto, q_auto, c_fill
-
-#### **Endpoints**
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/imagenes` | Upload a Cloudinary |
-| DELETE | `/api/v1/imagenes/{public_id}` | Eliminar archivo |
-
+- **Sincronización:** BD ↔ Cloudinary bidireccional
 
 ### 9.3 PostgreSQL
 
-#### **Características**
-
 - **Versión:** 15+
-- **Conexión:** SQLAlchemy pool
-- **Tipo de BD:** Relacional
+- **Driver:** psycopg2-binary
+- **Conexión:** SQLModel/SQLAlchemy pool
 - **Migraciones:** Alembic
-
-#### **Configuración de Conexión**
-
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/foodstore
-```
-
-#### **Pool de Conexiones**
-
-```python
-pool_size=5
-max_overflow=10
-pool_pre_ping=True  # Validar conexiones
-```
 
 ---
 
@@ -1136,116 +959,73 @@ pool_pre_ping=True  # Validar conexiones
 
 ### 10.1 Arquitectura
 
-#### **WSManager (Singleton)**
+#### **WSManager (`app/modules/pedido/ws_manager.py`)**
 
-Gestiona pool de conexiones por canal:
-- `/ws/pedidos` - Feed general
-- Admin channel - Notificaciones administrativas
-
-**Ubicación:** `app/core/ws_manager.py`
-
-#### **Componentes**
+Gestor de conexiones en memoria con soporte para salas (rooms):
 
 ```python
-class WSManager:
-    def __init__(self):
-        self.connections: dict[str, list[WebSocket]] = {}
-    
-    async def connect(self, channel: str, websocket: WebSocket)
-    async def disconnect(self, channel: str, websocket: WebSocket)
-    async def broadcast(self, channel: str, message: dict)
+class ConnectionManager:
+    async def connect(websocket, usuario_id, rooms)
+    async def disconnect(websocket)
+    async def join_room(websocket, room)
+    async def leave_room(websocket, room)
+    async def broadcast(room, event) -> int  # Retorna cantidad de recipients
+    async def send_personal(websocket, event) -> bool
 ```
+
+**Salas:**
+- `staff:pedidos` — Todos los pedidos (staff only)
+- `user:{usuario_id}` — Pedidos propios (cliente)
 
 ### 10.2 Autenticación JWT en Handshake
 
-```javascript
-// Frontend
-const token = authStore.getState().accessToken;
-const ws = new WebSocket(`wss://api.example.com/ws/pedidos?token=${token}`);
-
-// Backend
-async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
-    payload = verify_jwt(token)
-    user_id = payload['sub']
-    # Conexión autenticada
+```python
+# Validación ANTES de websocket.accept() (Unidad 5)
+try:
+    user = decode_access_token(token)
+except JWTError:
+    return  # Cierra sin accept → 403
+await websocket.accept()
+await ws_manager.connect(websocket, usuario_id, rooms)
 ```
 
 ### 10.3 Estructura de Eventos
 
 ```json
+// Servidor → Cliente
 {
-  "type": "pedido.creado",
-  "payload": {
-    "pedido_id": 42,
-    "usuario_id": 5,
-    "estado_codigo": "PENDIENTE",
-    "total": 400.00,
-    "timestamp": "2026-06-14T14:30:00Z"
-  }
+  "type": "hello",
+  "payload": { "usuario_id": 5, "rooms": ["user:5", "staff:pedidos"], "server_ts": ... }
+}
+
+// Servidor → Cliente (cliente)
+{
+  "type": "pedido.mio.actualizado",
+  "payload": { "id": 42, "estado_codigo": "CONFIRMADO", "actualizado_en": "..." }
+}
+
+// Servidor → Staff
+{
+  "type": "pedido.estado.cambiado",
+  "payload": { "pedido": {...}, "estado_desde": "...", "estado_hacia": "...", "historial": {...} }
+}
+
+// Servidor → Staff
+{
+  "type": "stock.alerta",
+  "payload": { "ingredientes_criticos": [...], "total": 3 }
 }
 ```
 
 ```json
-{
-  "type": "pedido.estado.cambiado",
-  "payload": {
-    "pedido_id": 42,
-    "estado_desde": "PENDIENTE",
-    "estado_hacia": "CONFIRMADO",
-    "usuario_actor_id": 1,
-    "timestamp": "2026-06-14T14:35:00Z"
-  }
-}
+// Cliente → Servidor
+{ "type": "ping" }  // → Responde con { "type": "pong", "payload": { "t": ... } }
 ```
 
-### 10.4 Broadcast Post-Commit
+### 10.4 Hooks Frontend
 
-```python
-# Dentro de UoW (transacción)
-pedido = service.crear_pedido(...)
-
-# FUERA de UoW (post-commit)
-await ws_manager.broadcast(
-    channel="/ws/pedidos",
-    message={
-        "type": "pedido.creado",
-        "payload": pedido.dict()
-    }
-)
-```
-
-### 10.5 Hooks Frontend
-
-#### **usePedidoWebSocket**
 ```typescript
 const { estado, historial, conexionActiva } = usePedidoWebSocket(pedido_id);
-```
-
-#### **useAdminOrdersFeed**
-```typescript
-const { pedidos, conexionActiva } = useAdminOrdersFeed();
-```
-
-### 10.6 Reconexión Exponencial
-
-```javascript
-const maxRetries = 5;
-let retryCount = 0;
-const baseDelay = 1000; // 1 segundo
-
-async function connectWithRetry() {
-    try {
-        await connect();
-        retryCount = 0; // Reset
-    } catch (error) {
-        if (retryCount < maxRetries) {
-            const delay = baseDelay * Math.pow(2, retryCount);
-            await new Promise(r => setTimeout(r, delay));
-            retryCount++;
-            await connectWithRetry();
-        }
-    }
-}
 ```
 
 ---
@@ -1256,13 +1036,17 @@ async function connectWithRetry() {
 
 ```
 foood-store-backend/tests/
-├── conftest.py
-├── test_auth.py
-├── test_pedidos.py
-├── test_estadisticas.py
-├── test_pagos.py
-├── test_uploads.py
-└── test_websocket.py
+├── conftest.py              # Fixtures compartidos
+├── unit/
+│   ├── test_pagos_crear.py  # Unit tests de pagos
+│   ├── test_pedido_fsm.py   # Unit tests de FSM
+│   └── test_pedido_schemas.py # Unit tests de schemas
+└── integration/
+    ├── test_auth.py               # Tests de autenticación
+    ├── test_pagos_sincronizar.py  # Tests de sincronización MP
+    ├── test_pagos_webhook.py      # Tests de webhook
+    ├── test_pedido_crud.py        # Tests CRUD pedidos
+    └── test_pedido_estado.py      # Tests de transición de estados
 ```
 
 ### 11.2 Fixtures Principales (conftest.py)
@@ -1275,51 +1059,8 @@ foood-store-backend/tests/
 | `admin_headers` | function | Token ADMIN |
 | `client_headers` | function | Token CLIENTE |
 | `pedidos_headers` | function | Token GESTOR_PEDIDOS |
-| `producto_factory` | function | Factory Producto |
-| `pedido_factory` | function | Factory Pedido |
 
-### 11.3 Suite de Tests (20+)
-
-#### **Auth Tests**
-- ✅ Registro exitoso (201)
-- ✅ Credenciales inválidas (401)
-- ✅ Logout y revocación de refresh
-- ✅ Rate limiting (429 después de 5 intentos)
-- ✅ Refresh token válido
-
-#### **Pedidos Tests**
-- ✅ Crear pedido con stock disponible
-- ✅ Crear pedido con stock insuficiente (400)
-- ✅ Avanzar estado válido (FSM)
-- ✅ Avanzar estado inválido (422)
-- ✅ Cancelar pedido propio (solo PENDIENTE/CONFIRMADO)
-- ✅ Historial append-only (no UPDATE ni DELETE)
-
-#### **Estadísticas Tests**
-- ✅ Resumen: ventas hoy, ticket promedio
-- ✅ Ventas por período (DIARIO/MENSUAL)
-- ✅ Top 5 productos por ingresos
-- ✅ Distribución pedidos por estado
-- ✅ Excluye pedidos CANCELADO
-
-#### **Pagos Tests**
-- ✅ Crear pago con token válido
-- ✅ Webhook MercadoPago procesa correctamente
-- ✅ Idempotency key evita duplicados
-
-#### **Uploads Tests**
-- ✅ Upload válido (jpg, png, webp)
-- ✅ MIME inválido (400)
-- ✅ Tamaño > 5MB (400)
-- ✅ Eliminación exitosa
-
-#### **WebSocket Tests**
-- ✅ Conexión con JWT válido
-- ✅ Conexión rechazada sin JWT
-- ✅ Broadcast de eventos
-- ✅ Reconexión después de desconexión
-
-### 11.4 Ejecución de Tests
+### 11.3 Ejecución de Tests
 
 ```bash
 # Ejecutar todos los tests
@@ -1328,18 +1069,15 @@ pytest
 # Con cobertura
 pytest --cov=app --cov-report=html
 
+# Tests unitarios
+pytest tests/unit/ -v
+
+# Tests de integración
+pytest tests/integration/ -v
+
 # Tests específicos
-pytest tests/test_auth.py -v
-
-# Con markers
-pytest -m "integration"
+pytest tests/integration/test_auth.py -v
 ```
-
-### 11.5 Cobertura de Código
-
-- **Target:** 85%+
-- **Herramienta:** pytest-cov
-- **Exclusiones:** migraciones, configuración
 
 ---
 
@@ -1349,21 +1087,26 @@ pytest -m "integration"
 
 #### **Flujo**
 
-1. **Frontend:** Selecciona archivo (jpg, png, webp)
-2. **Frontend:** Valida MIME type y tamaño (5MB)
-3. **Frontend → Backend:** POST `/api/v1/imagenes`
-4. **Backend:** Genera firma Cloudinary (backend-signed)
-5. **Backend → Cloudinary:** Upload firmado
-6. **Cloudinary:** Retorna public_id y URLs
-7. **Backend → DB:** Registro en tabla Imagen
-8. **Backend → Frontend:** Retorna metadatos
+1. **Frontend:** Selecciona archivo (jpg, png, webp, ≤5MB)
+2. **Frontend → Backend:** `POST /api/v1/imagenes/upload`
+3. **Backend:** Genera firma Cloudinary (backend-signed)
+4. **Backend → Cloudinary:** Upload firmado
+5. **Cloudinary:** Retorna public_id y URLs
+6. **Backend → DB:** Registro en tabla Imagen
+7. **Backend → Frontend:** Retorna metadatos
 
 #### **Validaciones**
 
 - MIME types: jpg, jpeg, png, webp
-- Tamaño máximo: 5MB
-- Carpeta: foodstore/productos o foodstore/categorias
-- Overwrite: False (unique_filename: True)
+- Tamaño máximo: 5MB (configurable en `CLOUDINARY_MAX_FILE_MB`)
+- Carpeta: configurable (por defecto `foodstore/productos`)
+- Unique filename para evitar sobreescrituras
+
+### 12.2 Sincronización BD ↔ Cloudinary
+
+- `POST /imagenes/sincronizar?folder=productos` reconcilia la tabla local con Cloudinary
+- Crea filas para imágenes nuevas en Cloudinary
+- Marca como eliminadas las filas huérfanas
 
 ---
 
@@ -1373,24 +1116,24 @@ pytest -m "integration"
 
 - **Backend:** FastAPI + SQLModel + PostgreSQL
 - **Frontend:** React + TypeScript + Tailwind CSS + Vite
-- **Tiempo Real:** WebSockets con JWT
-- **Pagos:** MercadoPago Checkout PRO
-- **Medios:** Cloudinary
-- **Testing:** pytest + TestClient
+- **Tiempo Real:** WebSockets con JWT + Rooms (staff + usuario)
+- **Pagos:** MercadoPago Checkout PRO con webhook HMAC
+- **Medios:** Cloudinary con sincronización bidireccional
+- **Testing:** pytest + pytest-asyncio + httpx
 
 ### Características Clave
 
-✅ **RBAC completo** (6 roles, 11 permisos)  
-✅ **FSM para pedidos** (6 estados validados)  
-✅ **Unit of Work** (transacciones atómicas)  
-✅ **WebSockets** (comunicación tiempo real)  
-✅ **MercadoPago** (pagos online integrados)  
-✅ **Cloudinary** (gestión de imágenes)  
-✅ **Estadísticas** (KPIs y gráficos)  
-✅ **20+ tests** (pytest con cobertura)  
-✅ **API REST** (30+ endpoints documentados)  
-✅ **Validaciones de stock en tiempo real** (pre-creación + pre-confirmación + alertas WebSocket)  
-✅ **Soft delete** (auditoría completa)
-
-
-
+✅ **RBAC completo** (6 roles con permisos granulares)
+✅ **FSM para pedidos** (6 estados validados)
+✅ **Unit of Work** (transacciones atómicas)
+✅ **WebSockets con Rooms** (staff global + usuario privado)
+✅ **MercadoPago** (checkout PRO + webhook HMAC + sync manual)
+✅ **Cloudinary** (upload firmado + sincronización)
+✅ **Stock de seguridad** (alertas WebSocket por ingrediente)
+✅ **Escandallo automático** (costo_produccion desde ingredientes)
+✅ **Soft delete + Reactivación** (en todas las entidades)
+✅ **Costo de envío configurable** (en runtime)
+✅ **20+ tests** (unit + integration con pytest)
+✅ **40+ endpoints REST** (documentados en Swagger)
+✅ **Cookies HttpOnly** (refresh token seguro)
+✅ **Rate limiting** (protección contra brute force)

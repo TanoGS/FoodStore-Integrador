@@ -1,10 +1,10 @@
 ﻿from datetime import datetime, timezone
 from typing import Dict, List, NamedTuple, Optional
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from core.exceptions import (
-    NotFoundError, ForbiddenError, BadRequestError, UnprocessableError, ConflictError
+    NotFoundError, ForbiddenError, BadRequestError, UnprocessableError
 )
 
 from .models import (
@@ -36,8 +36,10 @@ from .events import (
     serialize_stock_alerta,
 )
 from .ws_manager import ws_manager
-from app.modules.catalogo.producto.models import Producto
-from app.modules.catalogo.ingrediente.models import Ingrediente
+from app.modules.catalogo.producto.repository import ProductoRepository
+from app.modules.pedido import stock as _stock
+from app.modules.usuario.repository import UsuarioRepository
+from app.modules.direccion.repository import DireccionRepository
 from core.settings_runtime import get_costo_envio_delivery
 
 
@@ -95,7 +97,7 @@ class PedidoService:
         # Si falta stock, se lanza un error 400 antes de entrar al UoW.
         # El mensaje de detalle va en el response para debugging/admin;
         # el frontend del cliente muestra un mensaje genérico al usuario.
-        faltantes_stock = self._obtener_resumen_stock_preview(datos)
+        faltantes_stock = _stock.obtener_resumen_stock_preview(self._session, datos)
         if faltantes_stock:
             raise BadRequestError({
                     "error": "stock_insuficiente",
@@ -215,13 +217,13 @@ class PedidoService:
             # Descontar stock al confirmar el pedido y detectar alerta
             stock_bajo: Optional[List[dict]] = None
             if estado_nuevo == EstadoPedido.CONFIRMADO.value:
-                cambios = self._descontar_stock(pedido)
-                stock_bajo = self._detectar_stock_bajo_actual(cambios)
+                cambios = _stock.descontar_stock(self._session, pedido)
+                stock_bajo = _stock.detectar_stock_bajo(self._session, cambios)
 
             # Devolver stock si se cancela desde un estado donde ya se había descontado
             # (el stock se descuenta al confirmar, por eso excluimos PENDIENTE)
             if estado_nuevo == EstadoPedido.CANCELADO.value and estado_actual != EstadoPedido.PENDIENTE.value:
-                self._devolver_stock(pedido)
+                _stock.devolver_stock(self._session, pedido)
 
             # Actualizar estado y persistir
             pedido.estado_codigo = estado_nuevo
@@ -316,7 +318,7 @@ class PedidoService:
             # Devolver stock si el pedido ya estaba confirmado
             # (stock solo se descuenta al pasar a CONFIRMADO)
             if estado_actual != EstadoPedido.PENDIENTE.value:
-                self._devolver_stock(pedido)
+                _stock.devolver_stock(self._session, pedido)
 
             # Actualizar estado
             pedido.estado_codigo = EstadoPedido.CANCELADO
@@ -481,7 +483,7 @@ class PedidoService:
         nombres_por_producto: Dict[int, List[str]] = {}
 
         for item in datos.detalles:
-            producto = self._session.get(Producto, item.producto_id)
+            producto = ProductoRepository(self._session).get_by_id(item.producto_id)
             if not producto or not producto.activo:
                 raise NotFoundError(f"Producto {item.producto_id} no disponible.")
 
@@ -550,7 +552,7 @@ class PedidoService:
 
         nombre_map: dict[int, dict[int, str]] = {}
         for pid in producto_ids:
-            producto = self._session.get(Producto, pid)
+            producto = ProductoRepository(self._session).get_by_id(pid)
             if not producto:
                 continue
             nombre_map[pid] = {
@@ -582,7 +584,7 @@ class PedidoService:
 
         nombre_map: dict[int, dict[int, str]] = {}
         for pid in producto_ids:
-            producto = self._session.get(Producto, pid)
+            producto = ProductoRepository(self._session).get_by_id(pid)
             if not producto:
                 continue
             nombre_map[pid] = {
@@ -621,16 +623,13 @@ class PedidoService:
         direccion: Optional[DireccionResumida] = None
 
         try:
-            from app.modules.usuario.models import Usuario
-            from app.modules.direccion.models import DireccionEntrega
-
-            usuario = self._session.get(Usuario, pedido.usuario_id)
+            usuario = UsuarioRepository(self._session).get_by_id(pedido.usuario_id)
             if usuario:
                 usuario_nombre = getattr(usuario, 'nombre', None) or usuario_nombre
                 usuario_email  = getattr(usuario, 'email',  '') or ''
 
             if pedido.direccion_id:
-                dir_orm = self._session.get(DireccionEntrega, pedido.direccion_id)
+                dir_orm = DireccionRepository(self._session).get_sin_restriccion(pedido.direccion_id)
                 if dir_orm:
                     direccion = DireccionResumida(
                         calle=      getattr(dir_orm, 'calle',      None),
@@ -709,275 +708,3 @@ class PedidoService:
 
             pedidos_admin = [self._construir_pedido_admin(p) for p in pedidos_orm]
             return {"data": pedidos_admin, "total": total}
-
-    # ====================================================================
-    # STOCK — DESCUENTO Y DEVOLUCIÓN DE INGREDIENTES/PRODUCTOS
-    # ====================================================================
-
-    def _descontar_stock(self, pedido: Pedido) -> List[dict]:
-        """
-        Descuenta stock de ingredientes al confirmar un pedido.
-        Se llama cuando el pedido pasa a CONFIRMADO.
-
-        El stock de los productos se deriva de sus ingredientes; no se maneja
-        producto.stock_cantidad de forma independiente.
-
-        Lógica:
-        - Por cada ingrediente requerido (no removido): ingrediente.stock -= cantidad_requerida * cantidad
-
-        Validación:
-        - ANTES de descontar, verifica que haya stock suficiente de ingredientes.
-        - Si algún ingrediente no tiene stock, lanza HTTPException(409)
-          y NO aplica ningún descuento (el pedido queda en PENDIENTE).
-
-        Returns:
-            Lista de dicts con {tipo, id, nombre, stock_anterior, stock_nuevo}
-            para construir el mensaje de notificación.
-        """
-        # ── Pre-validación: verificar stock suficiente antes de descontar ──
-        faltantes: List[dict] = []
-
-        for detalle in pedido.detalles:
-            producto = self._session.get(Producto, detalle.producto_id)
-            if not producto:
-                continue
-
-            # Validar stock de ingredientes (el stock del producto se deriva de sus ingredientes;
-            # no se valida producto.stock_cantidad de forma independiente)
-            # TODO: eliminar campo producto.stock_cantidad en futuras migraciones.
-            removidos = set(detalle.personalizacion or [])
-            for enlace in producto.ingredientes_enlaces:
-                if enlace.ingrediente_id in removidos:
-                    continue
-                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
-                if not ingrediente:
-                    continue
-                cantidad_requerida = float(enlace.cantidad_requerida) * detalle.cantidad
-                if ingrediente.stock < cantidad_requerida:
-                    faltantes.append({
-                        "tipo": "INGREDIENTE",
-                        "id": ingrediente.id,
-                        "nombre": ingrediente.nombre,
-                        "requerido": cantidad_requerida,
-                        "disponible": ingrediente.stock,
-                    })
-
-        if faltantes:
-            raise ConflictError(
-                f"stock_insuficiente_al_confirmar: pedido_id={faltantes[0].get('pedido_id', '?')}"
-            )
-
-        # ── Descuento real ──
-        cambios: List[dict] = []
-
-        for detalle in pedido.detalles:
-            producto = self._session.get(Producto, detalle.producto_id)
-            if not producto:
-                continue
-
-            # Obtener mapa de ingredientes removidos para este detalle
-            removidos = set(detalle.personalizacion or [])
-
-            # Descontar ingredientes requeridos (excepto los removidos por el cliente)
-            for enlace in producto.ingredientes_enlaces:
-                if enlace.ingrediente_id in removidos:
-                    # El cliente removió este ingrediente, no se consume
-                    continue
-
-                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
-                if not ingrediente:
-                    continue
-
-                cantidad_a_restar = float(enlace.cantidad_requerida) * detalle.cantidad
-                stock_anterior_ing = float(ingrediente.stock)
-                ingrediente.stock = max(0.0, float(ingrediente.stock) - cantidad_a_restar)
-                self._session.add(ingrediente)
-                cambios.append({
-                    "tipo": "INGREDIENTE",
-                    "id": ingrediente.id,
-                    "nombre": ingrediente.nombre,
-                    "stock_anterior": stock_anterior_ing,
-                    "stock_nuevo": float(ingrediente.stock),
-                })
-
-        return cambios
-
-    def _devolver_stock(self, pedido: Pedido) -> List[dict]:
-        """
-        Devuelve stock de ingredientes al cancelar un pedido confirmado.
-        Se llama cuando se cancela un pedido que ya estaba CONFIRMADO, EN_PREPARACION
-        o EN_CAMINO (el stock ya fue descontado).
-
-        El stock de los productos se deriva de sus ingredientes; no se maneja
-        producto.stock_cantidad de forma independiente.
-
-        Lógica:
-        - ingrediente.stock += cantidad_requerida * cantidad
-        """
-        cambios: List[dict] = []
-
-        for detalle in pedido.detalles:
-            producto = self._session.get(Producto, detalle.producto_id)
-            if not producto:
-                continue
-
-            # Obtener mapa de ingredientes removidos para este detalle
-            removidos = set(detalle.personalizacion or [])
-
-            # Devolver ingredientes requeridos (excepto los removidos por el cliente)
-            for enlace in producto.ingredientes_enlaces:
-                if enlace.ingrediente_id in removidos:
-                    continue
-
-                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
-                if not ingrediente:
-                    continue
-
-                cantidad_a_devolver = float(enlace.cantidad_requerida) * detalle.cantidad
-                stock_anterior_ing = float(ingrediente.stock)
-                ingrediente.stock = float(ingrediente.stock) + cantidad_a_devolver
-                self._session.add(ingrediente)
-                cambios.append({
-                    "tipo": "INGREDIENTE",
-                    "id": ingrediente.id,
-                    "nombre": ingrediente.nombre,
-                    "stock_anterior": stock_anterior_ing,
-                    "stock_nuevo": float(ingrediente.stock),
-                })
-
-        return cambios
-
-    # ====================================================================
-    # VALIDACIÓN DE STOCK EN CREAR_PEDIDO
-    # ====================================================================
-
-    def _obtener_resumen_stock_preview(self, datos: PedidoCreate) -> List[dict]:
-        """
-        Valida disponibilidad de stock ANTES de crear el pedido.
-        Recibe el schema de request (PedidoCreate) — sin aún tener un pedido ORM.
-        Retorna lista de faltantes (vacía si todo OK).
-        """
-        resumen: List[dict] = []
-
-        for item in datos.detalles:
-            producto = self._session.get(Producto, item.producto_id)
-            if not producto:
-                # El error de "producto no existe" se maneja más arriba en crear_pedido
-                continue
-
-            removidos = set(item.personalizacion or [])
-
-            # Ingredientes (el stock del producto se deriva de sus ingredientes;
-            # no se valida producto.stock_cantidad de forma independiente)
-            # TODO: eliminar campo producto.stock_cantidad en futuras migraciones.
-            for enlace in producto.ingredientes_enlaces:
-                if enlace.ingrediente_id in removidos:
-                    continue
-                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
-                if not ingrediente:
-                    continue
-                requerido = float(enlace.cantidad_requerida) * item.cantidad
-                disponible = float(ingrediente.stock)
-                if disponible < requerido:
-                    resumen.append({
-                        "tipo": "INGREDIENTE",
-                        "id": ingrediente.id,
-                        "nombre": ingrediente.nombre,
-                        "requerido": requerido,
-                        "disponible": disponible,
-                        "ok": False,
-                    })
-
-        return resumen
-
-    # ====================================================================
-    # DETECCIÓN DE STOCK BAJO TRAS DESCONTAR (avanzar_estado → CONFIRMADO)
-    # ====================================================================
-
-    def _detectar_stock_bajo_actual(self, cambios_stock: List[dict]) -> List[dict]:
-        """
-        Recibe la lista de cambios devuelta por _descontar_stock y consulta
-        el stock actual de los ingredientes afectados.
-        Retorna la lista de ingredientes cuyo stock quedó por debajo de su
-        umbral de seguridad, con todos los datos necesarios para el payload
-        del WebSocket.
-
-        Returns:
-            Lista de dicts con {id, nombre, stock_actual, stock_seguridad, unidad}
-        """
-        criticos: List[dict] = []
-
-        for cambio in cambios_stock:
-            if cambio["tipo"] != "INGREDIENTE":
-                continue
-
-            ingrediente = self._session.get(Ingrediente, cambio["id"])
-            if not ingrediente:
-                continue
-
-            seguridad = getattr(ingrediente, "stock_seguridad", None)
-            if seguridad is None:
-                continue
-
-            if float(ingrediente.stock) < float(seguridad):
-                criticos.append({
-                    "id": ingrediente.id,
-                    "nombre": ingrediente.nombre,
-                    "stock_actual": float(ingrediente.stock),
-                    "stock_seguridad": float(seguridad),
-                    "unidad": getattr(ingrediente, "unidad", "u"),
-                })
-
-        return criticos
-
-    # ====================================================================
-    # PREVIEW DE STOCK (para _obtener_resumen_stock — existente)
-    # ====================================================================
-
-    def _obtener_resumen_stock(self, pedido: Pedido) -> List[dict]:
-        """
-        Retorna una预览 del impacto en stock sin modificar nada.
-        Útil para validar disponibilidad antes de confirmar.
-        """
-        resumen: List[dict] = []
-
-        for detalle in pedido.detalles:
-            producto = self._session.get(Producto, detalle.producto_id)
-            if not producto:
-                continue
-
-            removidos = set(detalle.personalizacion or [])
-
-            # Producto
-            if producto.stock_cantidad < detalle.cantidad:
-                resumen.append({
-                    "tipo": "PRODUCTO",
-                    "id": producto.id,
-                    "nombre": producto.nombre,
-                    "requerido": detalle.cantidad,
-                    "disponible": producto.stock_cantidad,
-                    "ok": False,
-                })
-
-            # Ingredientes
-            for enlace in producto.ingredientes_enlaces:
-                if enlace.ingrediente_id in removidos:
-                    continue
-
-                ingrediente = self._session.get(Ingrediente, enlace.ingrediente_id)
-                if not ingrediente:
-                    continue
-
-                requerido = float(enlace.cantidad_requerida) * detalle.cantidad
-                disponible = float(ingrediente.stock)
-                if disponible < requerido:
-                    resumen.append({
-                        "tipo": "INGREDIENTE",
-                        "id": ingrediente.id,
-                        "nombre": ingrediente.nombre,
-                        "requerido": requerido,
-                        "disponible": disponible,
-                        "ok": False,
-                    })
-
-        return resumen

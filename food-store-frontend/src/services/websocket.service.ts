@@ -18,7 +18,7 @@ import { fallbackPolling } from './fallbackPolling.service';
 
 // ─── Constantes ─────────────────────────────────────────────────────
 
-const WS_PATH                    = '/api/ws/pedidos';
+const WS_PATH                    = '/api/v1/ws/pedidos';
 const HEARTBEAT_INTERVAL_MS      = 25_000;   // ping cada 25s
 const PONG_TIMEOUT_MS            = 60_000;   // si no hay pong en 60s, reconecta
 const RECONNECT_DELAYS_MS        = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];

@@ -28,17 +28,20 @@ Link video entrega Final: https://www.youtube.com/watch?v=9lfo6rXOykc
 
 # Características Clave
 
- **RBAC completo** (6 roles, 11 permisos)  
- **FSM para pedidos** (6 estados validados)  
- **Unit of Work** (transacciones atómicas)  
- **WebSockets** (comunicación tiempo real)  
- **MercadoPago** (pagos online integrados)  
- **Cloudinary** (gestión de imágenes)  
- **Estadísticas** (KPIs y gráficos)  
- **20+ tests** (pytest con cobertura)  
- **API REST** (30+ endpoints documentados)  
- **Validaciones de stock en tiempo real** (pre-creación + pre-confirmación + alertas WebSocket)  
- **Soft delete** (auditoría completa)
+**RBAC completo** (6 roles, 11 permisos)  
+**FSM para pedidos** (6 estados validados)  
+**Unit of Work** (transacciones atómicas)  
+**WebSockets con Rooms** (sala staff + sala privada por usuario)  
+**MercadoPago** (checkout PRO + webhook HMAC + sync manual)  
+**Cloudinary** (upload firmado + sincronización BD)  
+**Escandallo automático** (costo_produccion desde ingredientes)  
+**Stock de seguridad** (alertas WebSocket por ingrediente)  
+**Costo de envío configurable** (en runtime desde panel admin)  
+**Reactivación de soft-deleted** (usuarios, productos, categorías, ingredientes, direcciones)  
+**Cookies HttpOnly** (refresh token seguro contra XSS)  
+**20+ tests** (pytest con cobertura)  
+**API REST** (50+ endpoints documentados en Swagger)  
+**Soft delete** (auditoría completa)  
 
 ---
 
@@ -46,15 +49,15 @@ Link video entrega Final: https://www.youtube.com/watch?v=9lfo6rXOykc
 
 | Patrón | Implementación | Beneficio |
 |--------|----------------|-----------|
-| **Feature-First** | Módulos organizados por dominio (auth, pedido, etc.) | Escalabilidad, mantenibilidad |
-| **Repository Pattern** | GenericRepository + UnitOfWork | Desacoplamiento, testabilidad |
+| **Feature-First** | Módulos organizados por dominio (usuarios, pedido, etc.) | Escalabilidad, mantenibilidad |
+| **Repository Pattern** | UnitOfWork por módulo | Desacoplamiento, testabilidad |
 | **Unit of Work** | Transacciones atómicas en pedidos | Consistencia de datos |
 | **FSM (Finite State Machine)** | Estados de pedido con reglas validadas | Flujo de negocio claro |
 | **Dependency Injection** | FastAPI dependencies | Flexibilidad, testing |
-| **JWT-based Auth** | Tokens access + refresh | Seguridad stateless |
+| **JWT-based Auth** | Access token (30min) + Refresh token en cookie HttpOnly (7 días) | Seguridad stateless |
 | **RBAC (Role-Based Access Control)** | 6 roles con 11 permisos | Control granular de acceso |
-| **WebSocket Manager** | Pool singleton con canales | Comunicación bidireccional |
-| **Cloudinary Integration** | Backend-signed uploads | Seguridad en manejo de medios |
+| **WebSocket Manager** | Rooms (salas): `staff:pedidos` + `user:{id}` en `app/modules/pedido/ws_manager.py` | Comunicación bidireccional |
+| **Cloudinary Integration** | Backend-signed uploads + sincronización BD | Seguridad en manejo de medios |
 
 ---
 
@@ -92,8 +95,8 @@ Link video entrega Final: https://www.youtube.com/watch?v=9lfo6rXOykc
           alembic upgrade heads
    2.8  Levantar el servidor:
           uvicorn main:app --reload
-        → Swagger: http://127.0.0.1:8000/docs
-        → Swagger: http://127.0.0.1:8000/redoc
+        → Swagger UI:  http://127.0.0.1:8000/docs
+        → ReDoc:      http://127.0.0.1:8000/redoc
 
 3. FRONTEND (food-store-frontend)
    3.1  Abrir otra terminal en la carpeta del frontend

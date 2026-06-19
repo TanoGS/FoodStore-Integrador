@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from core.config import settings
 from core.rate_limit import RateLimitMiddleware
@@ -81,6 +82,19 @@ app = FastAPI(
 
 # Handler de excepciones de dominio (AppError y subclases)
 app.add_exception_handler(AppError, app_error_handler)
+
+# Handler genérico para excepciones no capturadas.
+# IMPORTANTE: sin este handler, las excepciones no manejadas llegan a
+# ServerErrorMiddleware (que está FUERA del CORSMiddleware) y la respuesta 500
+# no lleva el header Access-Control-Allow-Origin → el navegador reporta error CORS.
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Error interno no manejado: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor.", "code": "internal_error"},
+    )
+
+app.add_exception_handler(Exception, _unhandled_exception_handler)
 
 
 # =============================================================================

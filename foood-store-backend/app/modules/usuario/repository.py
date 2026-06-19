@@ -83,3 +83,31 @@ class UsuarioRepository(BaseRepository[Usuario]):
             )
         )
         return self.session.exec(statement).one()
+
+    def get_by_id_with_roles(self, usuario_id: int) -> Optional[Usuario]:
+        """Obtiene un usuario por ID con sus roles cargados eagerly."""
+        statement = (
+            select(Usuario)
+            .where(Usuario.id == usuario_id)
+            .options(selectinload(Usuario.roles_enlaces).selectinload(UsuarioRol.rol))
+        )
+        return self.session.exec(statement).first()
+
+    def get_all_with_roles(self) -> list[Usuario]:
+        """Obtiene todos los usuarios con sus roles cargados."""
+        statement = select(Usuario).options(
+            selectinload(Usuario.roles_enlaces).selectinload(UsuarioRol.rol)
+        )
+        return list(self.session.exec(statement).unique().all())
+
+    def get_refresh_token_by_hash(self, token_hash: str) -> Optional["RefreshToken"]:
+        from .models import RefreshToken
+        return self.session.exec(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        ).first()
+
+    def add_refresh_token(self, refresh_token: "RefreshToken") -> None:
+        self.session.add(refresh_token)
+
+    def rol_existe(self, codigo: str) -> bool:
+        return self.session.exec(select(Rol).where(Rol.codigo == codigo)).first() is not None

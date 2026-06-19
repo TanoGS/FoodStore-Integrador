@@ -57,7 +57,7 @@ class ProductoService:
                 raise BadRequestError("El precio del producto no puede ser 0. Ingresá un precio manual o configurá la receta y el margen.",
                 )
 
-            self._session.add(producto)
+            uow.productos.add(producto)
             self._session.flush()
             result = uow.productos.get_activo(producto.id)
 
@@ -167,7 +167,7 @@ class ProductoService:
                     setattr(producto, key, value)
 
             producto.actualizado_en = datetime.now(timezone.utc)
-            self._session.add(producto)
+            uow.productos.add(producto)
             self._session.flush()
             result = uow.productos.get_activo(producto.id)
 
@@ -184,7 +184,7 @@ class ProductoService:
                 )
             producto.activo = activo
             producto.actualizado_en = datetime.now(timezone.utc)
-            self._session.add(producto)
+            uow.productos.add(producto)
             self._session.flush()
             result = uow.productos.get_activo(producto.id)
         return ProductoPublic.model_validate(result)
@@ -198,7 +198,7 @@ class ProductoService:
                 raise NotFoundError("Producto no encontrado",
                 )
             producto.eliminado_en = datetime.now(timezone.utc)
-            self._session.add(producto)
+            uow.productos.add(producto)
 
     # ------------------------------------------------------------------
     def reactivar_producto(self, producto_id: int) -> ProductoPublic:
@@ -211,7 +211,7 @@ class ProductoService:
                 )
             producto.eliminado_en = None
             producto.actualizado_en = datetime.now(timezone.utc)
-            self._session.add(producto)
+            uow.productos.add(producto)
             self._session.flush()
             result = uow.productos.get_by_id(producto.id)
         return ProductoPublic.model_validate(result)
@@ -229,7 +229,7 @@ class ProductoService:
                 raise NotFoundError("Producto no encontrado")
             producto.imagenes_url = imagenes_url
             producto.actualizado_en = datetime.now(timezone.utc)
-            self._session.add(producto)
+            uow.productos.add(producto)
             self._session.flush()
             result = uow.productos.get_activo(producto.id)
         return ProductoPublic.model_validate(result)

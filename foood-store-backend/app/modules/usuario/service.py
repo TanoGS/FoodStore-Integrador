@@ -3,14 +3,13 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import hashlib
 import secrets
-from sqlmodel import Session, select
+from sqlmodel import Session
 from core.security import get_password_hash, verify_password, create_access_token
 from core.config import settings
 from core.exceptions import NotFoundError, UnauthorizedError, BadRequestError, ConflictError
 from .models import Usuario, Rol, UsuarioRol, RefreshToken
 from .schemas import UsuarioCreate, UsuarioUpdate, UsuarioPublic
 from .unit_of_work import UsuarioUnitOfWork
-from sqlalchemy.orm import selectinload
 
 
 class UsuarioService:
@@ -35,19 +34,14 @@ class UsuarioService:
             
             for codigo in codigos_a_asignar:
                 # Verificamos que el código de rol exista realmente en BD
-                rol_existente = self._session.exec(select(Rol).where(Rol.codigo == codigo)).first()
-                if not rol_existente:
+                if not uow.usuarios.rol_existe(codigo):
                     raise BadRequestError(f"El rol con código '{codigo}' no existe")
                 
                 # Creamos la relación explícita hacia la tabla intermedia
-                enlace = UsuarioRol(rol_codigo=rol_existente.codigo)
+                enlace = UsuarioRol(rol_codigo=codigo)
                 nuevo_usuario.roles_enlaces.append(enlace)
 
             uow.usuarios.add(nuevo_usuario)
-            
-            self._session.flush()
-            self._session.refresh(nuevo_usuario)
-            
             return UsuarioPublic.model_validate(nuevo_usuario)
 
     # ====================================================================
@@ -75,7 +69,7 @@ class UsuarioService:
             expires = datetime.now(timezone.utc) + timedelta(
                 days=settings.REFRESH_TOKEN_EXPIRE_DAYS
             )
-            self._session.add(
+            uow.usuarios.add_refresh_token(
                 RefreshToken(
                     usuario_id=usuario.id,
                     token_hash=refresh_hash,
@@ -91,6 +85,7 @@ class UsuarioService:
                 max_age=1800,
                 samesite="lax",
                 secure=False,
+                path="/",
             )
             response.set_cookie(
                 key="refresh_token",
@@ -124,34 +119,33 @@ class UsuarioService:
         """
         token_hash = hashlib.sha256(raw_refresh.encode()).hexdigest()
 
-        rt = self._session.exec(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-        ).first()
+        with UsuarioUnitOfWork(self._session) as uow:
+            rt = uow.usuarios.get_refresh_token_by_hash(token_hash)
 
-        if not rt:
-            raise UnauthorizedError("Refresh token inválido.")
-        if rt.revoked_at is not None:
-            raise UnauthorizedError("Refresh token ya fue revocado.")
-        if rt.expires_at < datetime.now(timezone.utc):
-            raise UnauthorizedError("Refresh token expirado.")
+            if not rt:
+                raise UnauthorizedError("Refresh token inválido.")
+            if rt.revoked_at is not None:
+                raise UnauthorizedError("Refresh token ya fue revocado.")
+            if rt.expires_at < datetime.now(timezone.utc):
+                raise UnauthorizedError("Refresh token expirado.")
 
-        # Revocar el token usado (rotación)
-        rt.revoked_at = datetime.now(timezone.utc)
-        self._session.add(rt)
+            # Revocar el token usado (rotación)
+            rt.revoked_at = datetime.now(timezone.utc)
+            uow.usuarios.add_refresh_token(rt)
 
-        usuario = self._session.get(Usuario, rt.usuario_id)
-        if not usuario or not usuario.activo:
-            raise UnauthorizedError("Usuario no encontrado o inactivo.")
+            usuario = uow.usuarios.get_by_id(rt.usuario_id)
+            if not usuario or not usuario.activo:
+                raise UnauthorizedError("Usuario no encontrado o inactivo.")
 
-        roles = [enlace.rol_codigo for enlace in usuario.roles_enlaces]
-        new_access = create_access_token(subject=str(usuario.id), roles=roles)
+            roles = [enlace.rol_codigo for enlace in usuario.roles_enlaces]
+            new_access = create_access_token(subject=str(usuario.id), roles=roles)
 
-        raw_new, hash_new = self._generate_refresh_token()
-        expires = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-        self._session.add(
-            RefreshToken(usuario_id=usuario.id, token_hash=hash_new, expires_at=expires)
-        )
-        self._session.commit()
+            raw_new, hash_new = self._generate_refresh_token()
+            expires = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            uow.usuarios.add_refresh_token(
+                RefreshToken(usuario_id=usuario.id, token_hash=hash_new, expires_at=expires)
+            )
+            # UoW commitea al salir del with
 
         response.set_cookie(
             key="access_token",
@@ -160,6 +154,7 @@ class UsuarioService:
             max_age=1800,
             samesite="lax",
             secure=False,
+            path="/",
         )
         response.set_cookie(
             key="refresh_token",
@@ -176,13 +171,12 @@ class UsuarioService:
         """Revoca el refresh token en BD y elimina ambas cookies."""
         if raw_refresh:
             token_hash = hashlib.sha256(raw_refresh.encode()).hexdigest()
-            rt = self._session.exec(
-                select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-            ).first()
-            if rt and rt.revoked_at is None:
-                rt.revoked_at = datetime.now(timezone.utc)
-                self._session.add(rt)
-                self._session.commit()
+            with UsuarioUnitOfWork(self._session) as uow:
+                rt = uow.usuarios.get_refresh_token_by_hash(token_hash)
+                if rt and rt.revoked_at is None:
+                    rt.revoked_at = datetime.now(timezone.utc)
+                    uow.usuarios.add_refresh_token(rt)
+                # UoW commitea al salir del with
 
         response.delete_cookie(key="access_token", httponly=True, samesite="lax")
         response.delete_cookie(
@@ -196,7 +190,7 @@ class UsuarioService:
     # ====================================================================
     def actualizar_usuario(self, usuario_id: int, data: UsuarioUpdate) -> UsuarioPublic:
         with UsuarioUnitOfWork(self._session) as uow:
-            usuario = self._session.get(Usuario, usuario_id)
+            usuario = uow.usuarios.get_by_id(usuario_id)
             if not usuario:
                 raise NotFoundError("Usuario no encontrado")
             
@@ -213,9 +207,6 @@ class UsuarioService:
             usuario.actualizado_en = datetime.now(timezone.utc)
             
             uow.usuarios.add(usuario)
-            self._session.flush()
-            self._session.refresh(usuario)
-            
             return UsuarioPublic.model_validate(usuario)
 
     # ====================================================================
@@ -226,7 +217,7 @@ class UsuarioService:
         Permite cambiar la contraseña solo si la actual es correcta.
         """
         with UsuarioUnitOfWork(self._session) as uow:
-            usuario = self._session.get(Usuario, usuario_id)
+            usuario = uow.usuarios.get_by_id(usuario_id)
             if not usuario:
                 raise NotFoundError("Usuario no encontrado")
             
@@ -238,8 +229,6 @@ class UsuarioService:
             usuario.password = get_password_hash(password_nueva)
             usuario.actualizado_en = datetime.now(timezone.utc)
             uow.usuarios.add(usuario)
-            self._session.flush()
-            
             return {"message": "Contraseña actualizada exitosamente"}
 
     # ====================================================================
@@ -247,11 +236,7 @@ class UsuarioService:
     # ====================================================================
     def obtener_usuario_por_id(self, usuario_id: int) -> UsuarioPublic:
         with UsuarioUnitOfWork(self._session) as uow:
-            usuario = self._session.exec(
-                select(Usuario)
-                .where(Usuario.id == usuario_id)
-                .options(selectinload(Usuario.roles_enlaces).selectinload(UsuarioRol.rol))
-            ).first()
+            usuario = uow.usuarios.get_by_id_with_roles(usuario_id)
             if not usuario:
                 raise NotFoundError("Usuario no encontrado")
             return UsuarioPublic.model_validate(usuario)
@@ -269,7 +254,7 @@ class UsuarioService:
         
     def eliminar_logicamente(self, usuario_id: int) -> dict:
         with UsuarioUnitOfWork(self._session) as uow:
-            usuario = self._session.get(Usuario, usuario_id)
+            usuario = uow.usuarios.get_by_id(usuario_id)
             if not usuario:
                 raise NotFoundError("Usuario no encontrado")
             if usuario.eliminado_en is not None:
@@ -282,7 +267,7 @@ class UsuarioService:
 
     def reactivar_usuario(self, usuario_id: int) -> UsuarioPublic:
         with UsuarioUnitOfWork(self._session) as uow:
-            usuario = self._session.get(Usuario, usuario_id)
+            usuario = uow.usuarios.get_by_id(usuario_id)
             if not usuario:
                 raise NotFoundError("Usuario no encontrado")
             if usuario.eliminado_en is None:
@@ -291,8 +276,6 @@ class UsuarioService:
             usuario.eliminado_en = None
             usuario.activo = True
             uow.usuarios.add(usuario)
-            self._session.flush()
-            self._session.refresh(usuario)
             return UsuarioPublic.model_validate(usuario)
         
     def listar_para_gestion(self, offset: int, limit: int):
@@ -308,10 +291,7 @@ class UsuarioService:
         incluyendo la lista de roles asociados a cada uno.
         """
         with UsuarioUnitOfWork(self._session) as uow:
-            statement = select(Usuario).options(
-                selectinload(Usuario.roles_enlaces).selectinload(UsuarioRol.rol)
-            )
-            resultados = self._session.exec(statement).unique().all()
+            resultados = uow.usuarios.get_all_with_roles()
             return [UsuarioPublic.model_validate(u) for u in resultados]
 
     # ====================================================================
@@ -319,28 +299,22 @@ class UsuarioService:
     # ====================================================================
     def asignar_roles(self, usuario_id: int, codigos: List[str], asignado_por_id: int | None = None) -> UsuarioPublic:
         with UsuarioUnitOfWork(self._session) as uow:
-            usuario = self._session.exec(
-                select(Usuario)
-                .where(Usuario.id == usuario_id)
-                .options(selectinload(Usuario.roles_enlaces))
-            ).first()
+            usuario = uow.usuarios.get_by_id_with_roles(usuario_id)
             if not usuario:
                 raise NotFoundError("Usuario no encontrado")
 
             for codigo in codigos:
-                if not self._session.exec(select(Rol).where(Rol.codigo == codigo)).first():
+                if not uow.usuarios.rol_existe(codigo):
                     raise BadRequestError(f"El rol '{codigo}' no existe")
 
             # Reemplazar roles (cascade delete-orphan borra los anteriores al flush)
             usuario.roles_enlaces.clear()
-            self._session.flush()
+            uow.usuarios.add(usuario)  # flush para aplicar el cascade delete-orphan
 
             for codigo in codigos:
                 enlace = UsuarioRol(rol_codigo=codigo, asignado_por_id=asignado_por_id)
                 usuario.roles_enlaces.append(enlace)
 
             usuario.actualizado_en = datetime.now(timezone.utc)
-            self._session.add(usuario)
-            self._session.flush()
-            self._session.refresh(usuario)
+            uow.usuarios.add(usuario)
             return UsuarioPublic.model_validate(usuario)

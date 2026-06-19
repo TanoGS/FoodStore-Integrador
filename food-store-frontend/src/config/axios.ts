@@ -7,9 +7,26 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   // withCredentials: true → el navegador envía automáticamente la cookie
-  // HttpOnly `access_token` en cada request. No necesitamos leer el token
-  // manualmente ni incluirlo en el header Authorization.
+  // HttpOnly `access_token` en cada request. Además se añade el header
+  // Authorization explícito (ver interceptor abajo) para que el backend
+  // priorice el token de esta pestaña y no la cookie compartida entre tabs.
   withCredentials: true,
+});
+
+// ─── Interceptor de requests: adjuntar token de sessionStorage ────────────────
+// Las cookies son compartidas entre pestañas del mismo navegador, pero
+// sessionStorage es por-pestaña. Si el usuario tiene sesiones distintas en
+// distintas pestañas (ej. ADMIN en una, CLIENTE en otra), sin este interceptor
+// el backend recibe la cookie de la última sesión iniciada (no la de esta tab).
+// Enviando el token como Authorization header, el backend puede priorizar el
+// JWT correcto correspondiente a esta pestaña.
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
 });
 
 // ─── Interceptor de respuestas: refresh automático ────────────────────────────

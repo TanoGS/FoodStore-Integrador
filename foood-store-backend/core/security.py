@@ -28,12 +28,15 @@ class OAuth2PasswordBearerWithCookie(OAuth2PasswordBearer):
     Si no lo encuentra, hace un fallback a la cabecera Authorization para que Swagger UI siga funcionando.
     """
     async def __call__(self, request: Request) -> Optional[str]:
-        # 1. Intentamos extraer el token de la cookie inyectada por el login
-        authorization = request.cookies.get("access_token")
-        
-        # 2. Fallback: Si no hay cookie, buscamos en los headers (Útil para Swagger)
+        # 1. Priorizamos el header Authorization (enviado explícitamente por el
+        #    cliente desde su sessionStorage por-pestaña). Esto evita que la
+        #    cookie compartida entre pestañas sobreescriba la sesión activa en
+        #    cada tab cuando hay múltiples sesiones abiertas simultáneamente.
+        authorization = request.headers.get("Authorization")
+
+        # 2. Fallback: Si no hay header, leemos la cookie HttpOnly del login.
         if not authorization:
-            authorization = request.headers.get("Authorization")
+            authorization = request.cookies.get("access_token")
         
         # 3. Si definitivamente no hay token, lanzamos error 401
         if not authorization:
