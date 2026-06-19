@@ -59,7 +59,9 @@ Link video entrega Final: https://www.youtube.com/watch?v=9lfo6rXOykc
 | **WebSocket Manager** | Rooms (salas): `staff:pedidos` + `user:{id}` en `app/modules/pedido/ws_manager.py` | Comunicación bidireccional |
 | **Cloudinary Integration** | Backend-signed uploads + sincronización BD | Seguridad en manejo de medios |
 
+
 ---
+
 
 ════════════════════════════════════════════════════
   FoodStore — Guía de Instalación y Ejecución
