@@ -63,9 +63,7 @@ Link video entrega Final: https://www.youtube.com/watch?v=9lfo6rXOykc
 ---
 
 
-════════════════════════════════════════════════════
   FoodStore — Guía de Instalación y Ejecución
-════════════════════════════════════════════════════
 
 1. PRERREQUISITOS
    • Python 3.11+ (recomendado: python.org o Miniconda)
